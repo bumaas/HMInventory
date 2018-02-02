@@ -1,0 +1,13 @@
+{
+  "id": "{E3BEF9D8-23D4-47A8-B823-53BD7AF65CC3}",
+  "name": "HM Inventory Report Creator",
+  "type": 3,
+  "vendor": "",
+  "aliases":
+  [
+  ],
+  "parentRequirements": [],
+  "childRequirements": [],
+  "implemented": [],
+  "prefix": "HMI"
+}
