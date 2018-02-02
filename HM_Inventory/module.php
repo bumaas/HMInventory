@@ -647,7 +647,13 @@ class HMInventoryReportCreator extends IPSModule {
 
 
     private function RegisterProperties() {
-        $this->RegisterPropertyString('Host', IPS_GetProperty(IPS_GetInstanceListByModuleID("{A151ECE9-D733-4FB9-AA15-7F7DD10C58AF}")[0], 'Host'));
+        $instanceList = IPS_GetInstanceListByModuleID("{A151ECE9-D733-4FB9-AA15-7F7DD10C58AF}");
+        if (count($instanceList) > 0){
+            $host = IPS_GetProperty($instanceList[0], 'Host');
+        } else {
+            $host = '';
+        }
+        $this->RegisterPropertyString('Host', $host);
         $this->RegisterPropertyBoolean('SaveDeviceListInVariable', false);
         $this->RegisterPropertyString('OutputFile', IPS_GetKernelDir().'HM_inventory.html');
         $this->RegisterPropertyInteger('SortOrder', 0);
