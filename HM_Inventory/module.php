@@ -15,7 +15,7 @@ class HMInventoryReportCreator extends IPSModule {
     const BG_COLOR_ODDLINE          = '#181818';         // Background color for the odd lines of the device list
     const BG_COLOR_EVENLINE         = '#1A2B3C';         // Background color for the even lines of the device list
 
-    const VERSION = '1.5* Testversion';
+    const VERSION = '1.5';
 
 
     // Überschreibt die interne IPS_Create($id) Funktion
@@ -429,10 +429,9 @@ class HMInventoryReportCreator extends IPSModule {
                     } else {
                         $HM_dev['HM_levels'][$HM_default_interface_no][1] = 65536 ;
                     }
-                    if (isset($HM_ParamSet['RSSI_DEVICE']) || isset($HM_ParamSet['RSSI_PEER'])){
-                        $HM_dev['HM_levels'][$HM_default_interface_no][2] = false ; //??
-                        $HM_dev['HM_levels'][$HM_default_interface_no][3] = true ; //best level
-                    }
+                    $HM_dev['HM_levels'][$HM_default_interface_no][2] = false ; //??
+                    $HM_dev['HM_levels'][$HM_default_interface_no][3] = false ; //best level
+
                     $previous_hm_levels = $HM_dev['HM_levels'];
                 }
             } else {
