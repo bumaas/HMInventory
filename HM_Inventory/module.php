@@ -1,9 +1,9 @@
 <?php
-
 declare(strict_types=1);
+
 // We need the "xmlrpc" include file
 // see https://github.com/gggeek/phpxmlrpc/releases
-require_once IPS_GetKernelDir() . 'modules/HMInventory/lib/phpxmlrpc-4.3.0/lib/xmlrpc.inc';
+include_once __DIR__ . '/../lib/phpxmlrpc-4.3.0/lib/xmlrpc.inc';
 
 // Klassendefinition
 class HMInventoryReportCreator extends IPSModule
@@ -679,7 +679,7 @@ class HMInventoryReportCreator extends IPSModule
         return $status;
     }
 
-    public static function usort_HM_address($a, $b)
+    private static function usort_HM_address(array $a, array $b)
     {
         $result = strcasecmp($a['HM_address'], $b['HM_address']);
 
@@ -694,7 +694,7 @@ class HMInventoryReportCreator extends IPSModule
         return $result;
     }
 
-    public static function usort_IPS_dev_name($a, $b)
+    private static function usort_IPS_dev_name(array $a, array $b)
     {
         if (($result = strcasecmp($a['IPS_name'], $b['IPS_name'])) == 0) {
             $result = self::usort_HM_address($a, $b);
@@ -703,7 +703,7 @@ class HMInventoryReportCreator extends IPSModule
         return $result;
     }
 
-    public static function usort_HM_device_adr($a, $b)
+    private static function usort_HM_device_adr(array $a, array $b)
     {
         if (($result = strcasecmp($a['HM_device'], $b['HM_device'])) == 0) {
             $result = self::usort_HM_address($a, $b);
@@ -712,7 +712,7 @@ class HMInventoryReportCreator extends IPSModule
         return $result;
     }
 
-    public static function usort_HM_type($a, $b)
+    private static function usort_HM_type(array $a, array $b)
     {
         if (($result = strcasecmp($a['HM_devtype'], $b['HM_devtype'])) == 0) {
             $result = self::usort_HM_address($a, $b);
