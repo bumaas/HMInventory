@@ -45,7 +45,7 @@ Zusätzlich wird die Liste der Devices bei Bedarf noch json-encoded in eine Stri
 
 In Symcon unter Kerninstanzen über `Modules -> Hinzufügen` das Modul ergänzen mit der URL:
 	
-    `https://github.com/Wolbolar/IPSymconAstronomy`  
+    `https://github.com/bumaas/HMInventory/`  
 
 ### b. Anlegen einer Instanz
 
