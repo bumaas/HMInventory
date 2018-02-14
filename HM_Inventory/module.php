@@ -458,7 +458,6 @@ class HMInventoryReportCreator extends IPSModule
             parent::SetValue('DeviceList', json_encode($HM_array)); //array in String variable speichern
         }
 
-
         // Generate HTML output code
 
         $HTML_intro = "<table width='100%' border='0' align='center' bgcolor=" . $this::BG_COLOR_GLOBAL . '>';
