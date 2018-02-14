@@ -115,10 +115,6 @@ class HMInventoryReportCreator extends IPSModule
         }
         //print_r($hm_dev_list);
 
-        if ($this->ReadPropertyBoolean('SaveDeviceListInVariable')) {
-            SetValueString($this->GetIDForIdent('DeviceList'), serialize($hm_dev_list));  //array in String variable speichern
-        }
-
         $xml_reqmsg = new xmlrpcmsg('listBidcosInterfaces');
         $xml_rtnmsg = $xml_BidCos_RF_client->send($xml_reqmsg);
         if ($xml_rtnmsg->errno == 0) {
@@ -457,6 +453,12 @@ class HMInventoryReportCreator extends IPSModule
 
         //print_r($HM_array);
 
+        if ($this->ReadPropertyBoolean('SaveDeviceListInVariable')) {
+            //SetValueString($this->GetIDForIdent('DeviceList'), json_encode($HM_array));
+            parent::SetValue('DeviceList', json_encode($HM_array)); //array in String variable speichern
+        }
+
+
         // Generate HTML output code
 
         $HTML_intro = "<table width='100%' border='0' align='center' bgcolor=" . $this::BG_COLOR_GLOBAL . '>';
@@ -644,6 +646,7 @@ class HMInventoryReportCreator extends IPSModule
         }
         $this->RegisterPropertyString('Host', $host);
         $this->RegisterPropertyBoolean('SaveDeviceListInVariable', false);
+        $this->RegisterPropertyBoolean('SaveHMArrayInVariable', false);
         $this->RegisterPropertyString('OutputFile', IPS_GetKernelDir() . 'HM_inventory.html');
         $this->RegisterPropertyInteger('SortOrder', 0);
         $this->RegisterPropertyBoolean('ShowVirtualKeyEntries', false);
