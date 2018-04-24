@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 // We need the "xmlrpc" include file
 // see https://github.com/gggeek/phpxmlrpc/releases
-include_once __DIR__ . '/../lib/phpxmlrpc-4.3.0/lib/xmlrpc.inc';
+include_once __DIR__ . '/../libs/phpxmlrpc-4.3.0/lib/xmlrpc.inc';
 
 // Klassendefinition
 class HMInventoryReportCreator extends IPSModule
@@ -18,7 +18,7 @@ class HMInventoryReportCreator extends IPSModule
     const BG_COLOR_ODDLINE = '#181818';         // Background color for the odd lines of the device list
     const BG_COLOR_EVENLINE = '#1A2B3C';         // Background color for the even lines of the device list
 
-    const VERSION = '1.5';
+    const VERSION = '1.6';
 
     // Überschreibt die interne IPS_Create($id) Funktion
     public function Create()
@@ -81,46 +81,58 @@ class HMInventoryReportCreator extends IPSModule
         $xml_reqmsg = new xmlrpcmsg('listDevices');
 
         $xml_BidCos_RF_client = new xmlrpc_client($BidCos_RF_Service_adr);
+        parent::SendDebug('send (xmlrpc):', $BidCos_RF_Service_adr.':listDevices', 0);
         $xml_rtnmsg = $xml_BidCos_RF_client->send($xml_reqmsg);
         if ($xml_rtnmsg->errno == 0) {
+            parent::SendDebug('received (xmlrpc):', json_encode($xml_rtnmsg->value()), 0);
             $hm_RF_dev_list = php_xmlrpc_decode($xml_rtnmsg->value());
         //    print_r($hm_RF_dev_list);
         } else {
+            parent::SendDebug('Error', "Can't get any device information from the BidCos-RF-Service", 0);
             $err += 1;
         }
 
         $xml_BidCos_IP_client = new xmlrpc_client($BidCos_IP_Service_adr);
         $xml_reqmsg = new xmlrpcmsg('listDevices');
+        parent::SendDebug('send (xmlrpc):', $BidCos_IP_Service_adr.':listDevices', 0);
         $xml_rtnmsg = $xml_BidCos_IP_client->send($xml_reqmsg);
         if ($xml_rtnmsg->errno == 0) {
+            parent::SendDebug('received (xmlrpc):', json_encode($xml_rtnmsg->value()), 0);
             $hm_IP_dev_list = php_xmlrpc_decode($xml_rtnmsg->value());
         //    print_r($hm_IP_dev_list);
         } else {
+            parent::SendDebug('Error', "Can't get any device information from the BidCos-IP-Service", 0);
             $err += 2;
         }
 
         $xml_BidCos_Wired_client = new xmlrpc_client($BidCos_Wired_Service_adr);
         $xml_reqmsg = new xmlrpcmsg('listDevices');
+        parent::SendDebug('send (xmlrpc):', $BidCos_Wired_Service_adr.':listDevices', 0);
         $xml_rtnmsg = $xml_BidCos_Wired_client->send($xml_reqmsg);
         if ($xml_rtnmsg->errno == 0) {
+            parent::SendDebug('received (xmlrpc):', json_encode($xml_rtnmsg->value()), 0);
             $hm_Wired_dev_list = php_xmlrpc_decode($xml_rtnmsg->value());
         //    print_r($hm_Wired_dev_list);
         } else {
+            parent::SendDebug('Error', "Can't get any device information from the BidCos-Wired-Service", 0);
             $err += 4;
         }
 
         $hm_dev_list = array_merge($hm_RF_dev_list, $hm_IP_dev_list, $hm_Wired_dev_list);
         if (count($hm_dev_list) == 0) {
-            die("Fatal error: Can't get any device information from the BidCos-Services (Error: $err");
+            trigger_error("Fatal error: Can't get any device information from the BidCos-Services (Error: $err)");
         }
         //print_r($hm_dev_list);
 
         $xml_reqmsg = new xmlrpcmsg('listBidcosInterfaces');
+        parent::SendDebug('send (xmlrpc):', $BidCos_RF_Service_adr.':listBidcosInterfaces', 0);
         $xml_rtnmsg = $xml_BidCos_RF_client->send($xml_reqmsg);
         if ($xml_rtnmsg->errno == 0) {
+            parent::SendDebug('received (xmlrpc):', json_encode($xml_rtnmsg->value()), 0);
             $hm_BidCos_Ifc_list = php_xmlrpc_decode($xml_rtnmsg->value());
         //    print_r($hm_BidCos_Ifc_list);
         } else {
+            parent::SendDebug('Error', "Can't get HM-interface information from the BidCos-RF-Service", 0);
             die("Fatal error: Can't get HM-interface information from the BidCos-Service ($BidCos_RF_Service_adr) - ($xml_rtnmsg->errstr");
         }
 
@@ -672,14 +684,12 @@ class HMInventoryReportCreator extends IPSModule
         //IP Prüfen
         $ip = $this->ReadPropertyString('Host');
         if (filter_var($ip, FILTER_VALIDATE_IP)) {
-            $status = IS_ACTIVE;
+            $this->SetStatus(IS_ACTIVE);
         } else {
-            $status = self::STATUS_INST_IP_IS_INVALID; //IP Adresse ist ungültig
+            $this->SetStatus(self::STATUS_INST_IP_IS_INVALID); //IP Adresse ist ungültig
         }
 
-        $this->SetStatus($status);
-
-        return $status;
+        return true;
     }
 
     private static function usort_HM_address(array $a, array $b)
@@ -755,6 +765,9 @@ class HMInventoryReportCreator extends IPSModule
             $header[] = 'Connection: close';
             $header[] = 'Accept-Charset: UTF-8';
             $header[] = 'Content-type: text/plain;charset="UTF-8"';
+
+            parent::SendDebug('send (curl):', $HMScript, 0);
+
             $ch = curl_init('http://' . $HMAddress . ':8181/' . $url);
             curl_setopt($ch, CURLOPT_HEADER, false);
             curl_setopt($ch, CURLOPT_FAILONERROR, true);
@@ -767,7 +780,10 @@ class HMInventoryReportCreator extends IPSModule
             curl_setopt($ch, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
             curl_setopt($ch, CURLOPT_TIMEOUT_MS, 5000);
             $result = curl_exec($ch);
+            parent::SendDebug('received (curl):', $result, 0);
+
             $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
             curl_close($ch);
             if ($http_code >= 400) {
                 throw new Exception('CCU unreachable:' . $http_code, E_USER_NOTICE);
