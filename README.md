@@ -54,6 +54,11 @@ In Symcon an beliebiger Stelle `Instanz hinzufügen` auswählen und `HM Inventor
 
 ## 4. Funktionsreferenz
 
+```php
+HMI_CreateReport(int $InstanceID)
+```
+Erstellt den Report mit allen Homeatic Devices entsprechend der in der Instanz eingestellten Eigenschaften.
+
 
 ## 5. Konfiguration
 
@@ -74,16 +79,7 @@ In Symcon an beliebiger Stelle `Instanz hinzufügen` auswählen und `HM Inventor
 
 ## 6. Anhang
 
-###  a. Funktionen:
-
-```php
-HMI_CreateReport(int $InstanceID)
-```
-Erstellt den Report mit allen Homeatic Devices entsprechend der in der Instanz eingestellten Eigenschaften.
-
-
-
-###  b. GUIDs und Datenaustausch
+###  GUIDs und Datenaustausch
 
 #### HM Inventory Modul
 

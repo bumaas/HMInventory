@@ -38,5 +38,14 @@
   "actions":
   [
     { "type": "Button", "label": "Create Report", "onClick": "HMI_CreateReport($id); echo 'Finished!'" }
+  ],
+  "status":
+  [
+    {
+      "code": 204,
+      "icon": "error",
+      "caption": "IP adress is not valid"
+    }
   ]
+
 }
