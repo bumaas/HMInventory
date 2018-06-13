@@ -18,7 +18,7 @@ class HMInventoryReportCreator extends IPSModule
     const BG_COLOR_ODDLINE = '#181818';         // Background color for the odd lines of the device list
     const BG_COLOR_EVENLINE = '#1A2B3C';         // Background color for the even lines of the device list
 
-    const VERSION = '1.6';
+    const VERSION = '1.7';
 
     // Überschreibt die interne IPS_Create($id) Funktion
     public function Create()
@@ -35,12 +35,6 @@ class HMInventoryReportCreator extends IPSModule
     {
         //Never delete this line!
         parent::ApplyChanges();
-
-        if (IPS_GetKernelRunlevel() != KR_READY) { //Kernel ready
-            IPS_LogMessage(get_class() . '::' . __FUNCTION__, 'Kernel is not ready (' . IPS_GetKernelRunlevel() . ')');
-
-            return;
-        }
 
         $this->SetTimerInterval('Update', $this->ReadPropertyInteger('UpdateInterval') * 60 * 1000);
 
@@ -161,7 +155,15 @@ class HMInventoryReportCreator extends IPSModule
             $IPS_device_num += 1;
             $IPS_HM_channel_already_assigned = false;
             $HM_address = IPS_GetProperty($id, 'Address');
-            $HM_Par_address = substr($HM_address, 0, strpos($HM_address, ':'));
+            parent::SendDebug('hm_device', 'ID: '.$id.', Address: '.$HM_address, 0);
+
+            $NeedlePos = strpos($HM_address, ':');
+            if ($NeedlePos) {
+                $HM_Par_address = substr($HM_address, 0, $NeedlePos);
+            } else {
+                echo 'HM address ('.$HM_address.') of id '.$id.' is invalid.'.PHP_EOL;
+                continue;
+            }
             $HM_device = '-';
             $HM_devname = '-';
             $HM_FWversion = ' ';
@@ -677,10 +679,6 @@ class HMInventoryReportCreator extends IPSModule
 
     private function SetInstanceStatus()
     {
-        if (IPS_GetKernelRunlevel() != KR_READY) { //Kernel ready
-            return false;
-        }
-
         //IP Prüfen
         $ip = $this->ReadPropertyString('Host');
         if (filter_var($ip, FILTER_VALIDATE_IP)) {
