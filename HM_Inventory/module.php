@@ -75,7 +75,7 @@ class HMInventoryReportCreator extends IPSModule
         $xml_reqmsg = new xmlrpcmsg('listDevices');
 
         $xml_BidCos_RF_client = new xmlrpc_client($BidCos_RF_Service_adr);
-        parent::SendDebug('send (xmlrpc):', $BidCos_RF_Service_adr.':listDevices', 0);
+        parent::SendDebug('send (xmlrpc):', $BidCos_RF_Service_adr . ':listDevices', 0);
         $xml_rtnmsg = $xml_BidCos_RF_client->send($xml_reqmsg);
         if ($xml_rtnmsg->errno == 0) {
             parent::SendDebug('received (xmlrpc):', json_encode($xml_rtnmsg->value()), 0);
@@ -88,7 +88,7 @@ class HMInventoryReportCreator extends IPSModule
 
         $xml_BidCos_IP_client = new xmlrpc_client($BidCos_IP_Service_adr);
         $xml_reqmsg = new xmlrpcmsg('listDevices');
-        parent::SendDebug('send (xmlrpc):', $BidCos_IP_Service_adr.':listDevices', 0);
+        parent::SendDebug('send (xmlrpc):', $BidCos_IP_Service_adr . ':listDevices', 0);
         $xml_rtnmsg = $xml_BidCos_IP_client->send($xml_reqmsg);
         if ($xml_rtnmsg->errno == 0) {
             parent::SendDebug('received (xmlrpc):', json_encode($xml_rtnmsg->value()), 0);
@@ -101,7 +101,7 @@ class HMInventoryReportCreator extends IPSModule
 
         $xml_BidCos_Wired_client = new xmlrpc_client($BidCos_Wired_Service_adr);
         $xml_reqmsg = new xmlrpcmsg('listDevices');
-        parent::SendDebug('send (xmlrpc):', $BidCos_Wired_Service_adr.':listDevices', 0);
+        parent::SendDebug('send (xmlrpc):', $BidCos_Wired_Service_adr . ':listDevices', 0);
         $xml_rtnmsg = $xml_BidCos_Wired_client->send($xml_reqmsg);
         if ($xml_rtnmsg->errno == 0) {
             parent::SendDebug('received (xmlrpc):', json_encode($xml_rtnmsg->value()), 0);
@@ -119,7 +119,7 @@ class HMInventoryReportCreator extends IPSModule
         //print_r($hm_dev_list);
 
         $xml_reqmsg = new xmlrpcmsg('listBidcosInterfaces');
-        parent::SendDebug('send (xmlrpc):', $BidCos_RF_Service_adr.':listBidcosInterfaces', 0);
+        parent::SendDebug('send (xmlrpc):', $BidCos_RF_Service_adr . ':listBidcosInterfaces', 0);
         $xml_rtnmsg = $xml_BidCos_RF_client->send($xml_reqmsg);
         if ($xml_rtnmsg->errno == 0) {
             parent::SendDebug('received (xmlrpc):', json_encode($xml_rtnmsg->value()), 0);
@@ -155,13 +155,13 @@ class HMInventoryReportCreator extends IPSModule
             $IPS_device_num += 1;
             $IPS_HM_channel_already_assigned = false;
             $HM_address = IPS_GetProperty($id, 'Address');
-            parent::SendDebug('hm_device', 'ID: '.$id.', Address: '.$HM_address, 0);
+            parent::SendDebug('hm_device', 'ID: ' . $id . ', Address: ' . $HM_address, 0);
 
             $NeedlePos = strpos($HM_address, ':');
             if ($NeedlePos) {
                 $HM_Par_address = substr($HM_address, 0, $NeedlePos);
             } else {
-                echo 'HM address ('.$HM_address.') of id '.$id.' is invalid.'.PHP_EOL;
+                echo 'HM address (' . $HM_address . ') of id ' . $id . ' is invalid.' . PHP_EOL;
                 continue;
             }
             $HM_device = '-';
