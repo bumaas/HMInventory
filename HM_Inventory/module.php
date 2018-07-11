@@ -29,7 +29,6 @@ class HMInventoryReportCreator extends IPSModule
         $this->RegisterProperties();
 
         $this->RegisterTimer('Update', 0, 'HMI_CreateReport(' . $this->InstanceID . ');');
-
     }
 
     public function ApplyChanges()
@@ -60,7 +59,6 @@ class HMInventoryReportCreator extends IPSModule
         // Anpassung für IPS v 2.5 27.10.2011 by Raketenschnecke
         // Anpassung für IPS v 4.0 16.03.2016 by bumaas
         // Erweiterung für HM-IP und HM-Wired 18.01.2017 by bumaas
-
 
         // Get the required data from the BidCos-Services (RF, IP, Wired)
         $IP_adr_BidCos_Service = $this->ReadPropertyString('Host');
