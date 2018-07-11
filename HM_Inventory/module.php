@@ -61,7 +61,8 @@ class HMInventoryReportCreator extends IPSModule
         // Anpassung für IPS v 4.0 16.03.2016 by bumaas
         // Erweiterung für HM-IP und HM-Wired 18.01.2017 by bumaas
 
-        // Get the required data from the BidCos-Service
+
+        // Get the required data from the BidCos-Services (RF, IP, Wired)
         $IP_adr_BidCos_Service = $this->ReadPropertyString('Host');
 
         $BidCos_Wired_Service_adr = sprintf('http://%s:2000', $IP_adr_BidCos_Service);
@@ -460,7 +461,10 @@ class HMInventoryReportCreator extends IPSModule
                 usort($HM_array, 'self::usort_HM_device_adr');
                 break;
             case 2: //by HM-type
-                usort($HM_array, 'self::usort_HM_type');
+                usort($HM_array, 'self::usort_HM_devtype');
+                break;
+            case 4: //by HM-device-name
+                usort($HM_array, 'self::usort_HM_devname');
                 break;
             default:
                 trigger_error('Unknown SortOrder: ' . $SortOrder);
@@ -726,9 +730,18 @@ class HMInventoryReportCreator extends IPSModule
         return $result;
     }
 
-    private static function usort_HM_type(array $a, array $b)
+    private static function usort_HM_devtype(array $a, array $b)
     {
         if (($result = strcasecmp($a['HM_devtype'], $b['HM_devtype'])) == 0) {
+            $result = self::usort_HM_address($a, $b);
+        }
+
+        return $result;
+    }
+
+    private static function usort_HM_devname(array $a, array $b)
+    {
+        if (($result = strcasecmp($a['HM_devname'], $b['HM_devname'])) == 0) {
             $result = self::usort_HM_address($a, $b);
         }
 

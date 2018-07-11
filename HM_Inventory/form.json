@@ -13,6 +13,7 @@
         { "label": "HM address", "value": 0 },
         { "label": "HM device type", "value": 1 },
         { "label": "HM channel type", "value": 2 },
+        { "label": "HM device name", "value": 4 },
         { "label": "IPS device name", "value": 3 }
       ]
     },

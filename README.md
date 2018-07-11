@@ -68,7 +68,7 @@ Erstellt den Report mit allen Homeatic Devices entsprechend der in der Instanz e
 | :--------- | :-----: | :------------------------| :--------------------------------------- |
 | Host        | string  | IP-Adresse des ersten gefundenen HomeMatic Socket | IP Adresse des Homematic Interfaces       |                  |
 | OutputFile  | string  | 'HM_inventory.html' im IPS Kernel Verzeichnis     | wenn ein Dateiname angegeben ist, wird die Ausgabe im HTML Format in diese Datei geschrieben |
-| SortOrder   | integer | 0                       | Sortierreihenfolge der HM Devices in der Ausgabeliste:<br>0 - HM address (default)<br>1 - HM device type<br>2 - HM channel type<br>3 - IPS device name |
+| SortOrder   | integer | 0                       | Sortierreihenfolge der HM Devices in der Ausgabeliste:<br>0 - HM address (default)<br>1 - HM device type<br>2 - HM channel type<br>3 - IPS device name<br>4 - HM device name (nur in Verbindung mit ShowHMConfiguratorDeviceNames == true)|
 | ShowLongIPSDeviceNames   | boolean | false      | legt fest, ob IPS Namen mit oder ohne vollständigem Pfad ausgegeben werden sollen |
 | ShowVirtualKeyEntries   | boolean | false       | legt fest, ob die Virtuellen Kanäle der Homematic ausgegeben werden sollen |
 | ShowHMConfiguratorDeviceNames | boolean | true  | legt fest, ob die in der Homematic gewählten Bezeichnungen ausgegeben werden sollen |
