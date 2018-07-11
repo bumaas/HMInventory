@@ -29,6 +29,7 @@ class HMInventoryReportCreator extends IPSModule
         $this->RegisterProperties();
 
         $this->RegisterTimer('Update', 0, 'HMI_CreateReport(' . $this->InstanceID . ');');
+
     }
 
     public function ApplyChanges()
@@ -651,11 +652,12 @@ class HMInventoryReportCreator extends IPSModule
 
     private function RegisterProperties()
     {
-        $instanceList = IPS_GetInstanceListByModuleID('{A151ECE9-D733-4FB9-AA15-7F7DD10C58AF}');
-        if (count($instanceList) > 0) {
-            $host = IPS_GetProperty($instanceList[0], 'Host');
-        } else {
-            $host = '';
+        $host = '';
+        if (IPS_GetKernelRunlevel() == KR_READY) { //Kernel ready
+            $HMinstanceList = IPS_GetInstanceListByModuleID('{A151ECE9-D733-4FB9-AA15-7F7DD10C58AF}');
+            if (count($HMinstanceList) > 0) {
+                $host = IPS_GetProperty($HMinstanceList[0], 'Host');
+            }
         }
         $this->RegisterPropertyString('Host', $host);
         $this->RegisterPropertyBoolean('SaveDeviceListInVariable', false);
@@ -666,7 +668,6 @@ class HMInventoryReportCreator extends IPSModule
         $this->RegisterPropertyBoolean('ShowMaintenanceEntries', true);
         $this->RegisterPropertyBoolean('ShowLongIPSDeviceNames', false);
         $this->RegisterPropertyBoolean('ShowHMConfiguratorDeviceNames', true);
-//        $this->RegisterPropertyBoolean('RequestStatusForLevelUpdate', false);
         $this->RegisterPropertyInteger('UpdateInterval', 0);
     }
 
