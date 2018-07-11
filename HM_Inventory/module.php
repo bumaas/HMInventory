@@ -654,11 +654,13 @@ class HMInventoryReportCreator extends IPSModule
     {
         $host = '';
         if (IPS_GetKernelRunlevel() == KR_READY) { //Kernel ready
+            //set default of host to host of first HM instance
             $HMinstanceList = IPS_GetInstanceListByModuleID('{A151ECE9-D733-4FB9-AA15-7F7DD10C58AF}');
             if (count($HMinstanceList) > 0) {
                 $host = IPS_GetProperty($HMinstanceList[0], 'Host');
             }
         }
+
         $this->RegisterPropertyString('Host', $host);
         $this->RegisterPropertyBoolean('SaveDeviceListInVariable', false);
         $this->RegisterPropertyBoolean('SaveHMArrayInVariable', false);
