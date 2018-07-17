@@ -152,7 +152,7 @@ class HMInventoryReportCreator extends IPSModule
         //
         foreach (IPS_GetInstanceListByModuleID('{EE4A81C6-5C90-4DB7-AD2F-F6BBD521412E}') as $id) {
             //first check if the device is assigned to the right gateway
-            if ($IP_adr_BidCos_Service != IPS_GetProperty(IPS_GetInstance($id)['ConnectionID'], 'Host') ){
+            if ($IP_adr_BidCos_Service != IPS_GetProperty(IPS_GetInstance($id)['ConnectionID'], 'Host')){
                 continue;
             }
             $HM_module_num += 1;
