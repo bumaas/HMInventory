@@ -18,7 +18,7 @@ class HMInventoryReportCreator extends IPSModule
     const BG_COLOR_ODDLINE = '#181818';         // Background color for the odd lines of the device list
     const BG_COLOR_EVENLINE = '#1A2B3C';         // Background color for the even lines of the device list
 
-    const VERSION = '1.7';
+    const VERSION = '1.7.1';
 
     // Überschreibt die interne IPS_Create($id) Funktion
     public function Create()
@@ -151,6 +151,10 @@ class HMInventoryReportCreator extends IPSModule
         // Fill array with all HM-devices found in IP-Symcon
         //
         foreach (IPS_GetInstanceListByModuleID('{EE4A81C6-5C90-4DB7-AD2F-F6BBD521412E}') as $id) {
+            //first check if the device is assigned to the right gateway
+            if ($IP_adr_BidCos_Service != IPS_GetProperty(IPS_GetInstance($id)['ConnectionID'], 'Host') ){
+                continue;
+            }
             $HM_module_num += 1;
             $IPS_device_num += 1;
             $IPS_HM_channel_already_assigned = false;
