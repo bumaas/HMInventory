@@ -1,13 +1,13 @@
 {
   "id": "{240F4263-D2CB-49BC-AC00-3A9DC2CF3C10}",
-  "author": "Burkhard Maas",
+  "author": "bumaas",
   "name": "HM Inventory Module",
   "url": "",
   "compatibility": {
     "version": "5.0",
     "date": 1518562800
   },
-  "version": "1.7.1",
-  "build": 0,
-  "date": 0
+  "version": "1.7",
+  "build": 2,
+  "date": 1544527067
 }

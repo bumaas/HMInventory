@@ -73,6 +73,7 @@ Erstellt den Report mit allen Homeatic Devices entsprechend der in der Instanz e
 | ShowVirtualKeyEntries   | boolean | false       | legt fest, ob die Virtuellen Kanäle der Homematic ausgegeben werden sollen |
 | ShowHMConfiguratorDeviceNames | boolean | true  | legt fest, ob die in der Homematic gewählten Bezeichnungen ausgegeben werden sollen |
 | ShowMaintenanceEntries | boolean | true         | legt fest, ob die MAINTENANCE (0) Kanäle ausgegeben werden sollen |
+| ShowNotUsedChannels | boolean | true         | legt fest, ob auch die Kanäle ausgegeben werden sollen, die nicht in IP-Symcon genutzt werden |
 | SaveDeviceListInVariable | boolean | false      | legt fest, ob die Liste der gefundenen Devices json codiert in einer Stringvariablen gespeichert werden soll|
 | UpdateIntervall | integer | 0                   | legt fest, in welchem regelmäßigen Abstand (in Minuten) der Report aufbereitet werden soll (0: deaktiviert)|
 

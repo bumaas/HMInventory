@@ -25,7 +25,10 @@
     { "type": "CheckBox", "name": "ShowHMConfiguratorDeviceNames", "caption": "Show HM Configurator Device Names" },
 
     { "type": "Label", "label": "If somebody is interested in Maintenance HM-Entries"},
-    { "type": "CheckBox", "name": "ShowMaintenanceEntries", "caption": "Show Maintenance Entries" },
+    { "type": "CheckBox", "name": "ShowMaintenanceEntries", "caption": "Show Maintenance Channel" },
+
+    { "type": "Label", "label": "If somebody is interested in Channels which are not used in IP-Symcon"},
+    { "type": "CheckBox", "name": "ShowNotUsedChannels", "caption": "Show Channels which are not used" },
 
     { "type": "Label", "label": "If somebody is interested in Virtual-Key HM-Entries"},
     { "type": "CheckBox", "name": "ShowVirtualKeyEntries", "caption": "Show Virtual Key Entries" },
@@ -45,7 +48,7 @@
     {
       "code": 204,
       "icon": "error",
-      "caption": "IP adress is not valid"
+      "caption": "IP address is not valid"
     }
   ]
 
