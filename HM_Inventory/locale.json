@@ -1,0 +1,36 @@
+{
+  "translations": {
+    "de": {
+      "IP Address of the Homematic Gateway": "IP Adresse des Homematic Gateways",
+      "Host": "Host",
+      "The Report is created as HTML file if a file name is given": "Der Bericht wird als HTML Datei erstellt, wenn ein Dateiname angegeben ist",
+      "Output File": "Ausgabedatei",
+      "Select the order how the device list should be sorted": "Auswahl der Sortierung, dach der die Geräte aufgelistet werden",
+      "Sort Order": "Sortierung",
+      "HM address": "HM Adresse",
+      "HM device type": "HM Gerätetyp",
+      "HM channel type": "HM Kanaltyp",
+      "HM device name": "HM Gerätename",
+      "IPS device name": "IPS Gerätename",
+      "device number": "Gerätenummer",
+      "If the complete path of the IPS instance should be shown": "Wenn der komplette Pfad der IPS Instanz ausgegeben werden soll",
+      "Show long IPS Device Names": "Gebe lange IPS Gerätenamen aus",
+      "If somebody is interested in the device names used in HM configurator (only device names which have been set once are shown). This parameter takes some performance.":
+        "Wenn jemand an den Gerätenamen auf Homematic Seite interessiert ist (es werden nur Namen angezeigt, die individuell vergeben wurden). Dieser Parameter kann etwas Performance kosten.",
+      "Show HM Configurator Device Names": "Gebe HM Gerätenamen aus",
+      "If somebody is interested in Maintenance HM-Entries": "Wenn jemand an den Maintenance Kanälen interessiert ist",
+      "Show Maintenance Channel": "Gebe Maintenance Kanäle aus",
+      "If somebody is interested in Channels which are not used in IP-Symcon": "Wenn jemand auch an den Kanälen interessiert ist, die nicht in IPS eingebunden sind",
+      "Show Channels which are not used": "Gebe ungenutzte Kanäle aus",
+      "If somebody is interested in Virtual-Key HM-Entries": "Wenn jemand an den Einträgen der Virtual Keys interessiert ist",
+      "Show Virtual Key Entries": "Gebe Virtual Keys Einträge aus",
+      "If the device list should be saved json encoded in a string variable": "Wenn die Geräteliste JSON-kodiert in einer String Variablen gespeichert werden soll",
+      "Save Device List in Variable": "Sichere Geräteliste in einer Variablen",
+      "If the report should be created automatically select an update interval": "Wenn der Bericht automatisch (zyklisch) erstellt werden soll, ist ein Aktualisierungsintervall zu setzen",
+      "Update Interval": "Aktualisierungsintervall",
+      "Minutes": "Minuten",
+      "Create Report": "Erzeuge Bericht",
+      "IP address is not valid": "IP Adresse ist nicht gültig"
+    }
+  }
+}
