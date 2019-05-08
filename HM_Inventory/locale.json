@@ -5,7 +5,7 @@
       "Host": "Host",
       "The Report is created as HTML file if a file name is given": "Der Bericht wird als HTML Datei erstellt, wenn ein Dateiname angegeben ist",
       "Output File": "Ausgabedatei",
-      "Select the order how the device list should be sorted": "Auswahl der Sortierung, dach der die Geräte aufgelistet werden",
+      "Select the order how the device list should be sorted": "Auswahl der Sortierung, nach der die Geräte aufgelistet werden",
       "Sort Order": "Sortierung",
       "HM address": "HM Adresse",
       "HM device type": "HM Gerätetyp",
@@ -30,7 +30,8 @@
       "Update Interval": "Aktualisierungsintervall",
       "Minutes": "Minuten",
       "Create Report": "Erzeuge Bericht",
-      "IP address is not valid": "IP Adresse ist nicht gültig"
+      "IP address is not valid": "IP Adresse ist nicht gültig",
+      "Finished!": "Fertig!"
     }
   }
 }

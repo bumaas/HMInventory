@@ -41,7 +41,7 @@
   ],
   "actions":
   [
-    { "type": "Button", "caption": "Create Report", "onClick": "HMI_CreateReport($id); echo 'Finished!'" }
+    { "type": "Button", "caption": "Create Report", "onClick": "$module = new IPSModule($id); HMI_CreateReport($id); echo $module->Translate('Finished!');" }
   ],
   "status":
   [
