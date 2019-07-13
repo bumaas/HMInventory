@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 // We need the "xmlrpc" include file
@@ -136,7 +137,6 @@ class HMInventoryReportCreator extends IPSModule
             die("Fatal error: Can't get HM-interface information from the BidCos-Service ($BidCos_RF_Service_adr) - ($xml_rtnmsg->errstr");
         }
 
-
         $HM_interface_num           = 0;
         $HM_interface_connected_num = 0;
         $HM_default_interface_no    = 0;
@@ -236,7 +236,7 @@ class HMInventoryReportCreator extends IPSModule
                         break;
                     }
                 }
-                unset ($HM_dev);
+                unset($HM_dev);
                 if (!$IPS_HM_channel_already_assigned) {
                     $IPS_HM_channel_num++;
                 }
@@ -408,12 +408,12 @@ class HMInventoryReportCreator extends IPSModule
                         foreach ($HM_lvl_array as &$hm_lvl) {
                             $hm_lvl[3] = ($hm_lvl[1] === $best_lvl);
                         }
-                        unset ($hm_lvl);
+                        unset($hm_lvl);
                     }
                     $HM_dev['HM_levels'] = $HM_lvl_array;
                 }
             }
-            unset ($HM_dev);
+            unset($HM_dev);
         }
 
         // Request tx/rx RF-levels from BidCos-IP-Service
@@ -449,7 +449,7 @@ class HMInventoryReportCreator extends IPSModule
                 $HM_dev['HM_levels'] = $previous_hm_levels;
             }
         }
-        unset ($HM_dev);
+        unset($HM_dev);
 
         // Sort device list
         //
@@ -781,8 +781,7 @@ class HMInventoryReportCreator extends IPSModule
         try {
             $HMScriptResult = $this->LoadHMScript($HMAddress, $url, $Script);
             $xml            = @new SimpleXMLElement(utf8_encode($HMScriptResult), LIBXML_NOBLANKS + LIBXML_NONET);
-        }
-        catch(Exception $exc) {
+        } catch(Exception $exc) {
             trigger_error($exc->getMessage());
         }
         if (isset($xml)) {
