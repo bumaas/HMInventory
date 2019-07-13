@@ -781,7 +781,7 @@ class HMInventoryReportCreator extends IPSModule
         try {
             $HMScriptResult = $this->LoadHMScript($HMAddress, $url, $Script);
             $xml            = @new SimpleXMLElement(utf8_encode($HMScriptResult), LIBXML_NOBLANKS + LIBXML_NONET);
-        } catch(Exception $exc) {
+        } catch (Exception $exc) {
             trigger_error($exc->getMessage());
         }
         if (isset($xml)) {
