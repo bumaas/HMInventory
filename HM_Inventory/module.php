@@ -23,7 +23,6 @@ class HMInventoryReportCreator extends IPSModule
     //property names
     private const PROP_SAVEDEVICELISTINVARIABLE = 'SaveDeviceListInVariable';
 
-
     // Überschreibt die interne IPS_Create($id) Funktion
     public function Create()
     {
@@ -76,9 +75,15 @@ class HMInventoryReportCreator extends IPSModule
 
         $IP_adr_Homematic = (string) IPS_GetProperty($ParentId, 'Host');
 
-        $BidCos_Wired_Service_adr = sprintf('http://%s:2000', $IP_adr_Homematic);
-        $BidCos_RF_Service_adr    = sprintf('http://%s:2001', $IP_adr_Homematic);
-        $BidCos_IP_Service_adr    = sprintf('http://%s:2010', $IP_adr_Homematic);
+        if ($ParentConfig['UseSSL']) {
+            $BidCos_Wired_Service_adr = sprintf('http://%s:%s', $IP_adr_Homematic, $ParentConfig['WRSSLPort']);
+            $BidCos_RF_Service_adr    = sprintf('http://%s:%s', $IP_adr_Homematic, $ParentConfig['RFSSLPort']);
+            $BidCos_IP_Service_adr    = sprintf('http://%s:%s', $IP_adr_Homematic, $ParentConfig['IPSSLPort']);
+        } else {
+            $BidCos_Wired_Service_adr = sprintf('http://%s:%s', $IP_adr_Homematic, $ParentConfig['WRPort']);
+            $BidCos_RF_Service_adr    = sprintf('http://%s:%s', $IP_adr_Homematic, $ParentConfig['RFPort']);
+            $BidCos_IP_Service_adr    = sprintf('http://%s:%s', $IP_adr_Homematic, $ParentConfig['IPPort']);
+        }
 
         $hm_RF_dev_list    = [];
         $hm_IP_dev_list    = [];
@@ -818,7 +823,14 @@ class HMInventoryReportCreator extends IPSModule
 
             $this->SendDebug('send (curl):', $HMScript, 0);
 
-            $ch = curl_init('http://' . $HMAddress . ':8181/' . $url);
+            $ParentId = @IPS_GetInstance($this->InstanceID)['ConnectionID'];
+            $ParentConfig = json_decode(IPS_GetConfiguration($ParentId), true);
+
+            if ($ParentConfig['UseSSL']) {
+                $ch = curl_init(sprintf('http://%s:%s/%s', $HMAddress, $ParentConfig['HSSSLPort'], $url));
+            } else {
+                $ch = curl_init(sprintf('http://%s:%s/%s', $HMAddress, $ParentConfig['HSPort'], $url));
+            }
             curl_setopt($ch, CURLOPT_HEADER, false);
             curl_setopt($ch, CURLOPT_FAILONERROR, true);
             curl_setopt($ch, CURLOPT_POST, true);
@@ -830,14 +842,10 @@ class HMInventoryReportCreator extends IPSModule
             curl_setopt($ch, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
             curl_setopt($ch, CURLOPT_TIMEOUT_MS, 5000);
 
-            $ParentId = @IPS_GetInstance($this->InstanceID)['ConnectionID'];
-            $ParentConfig = json_decode(IPS_GetConfiguration($ParentId), true);
             if ($ParentConfig['Password'] != '') {
                 curl_setopt($ch, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
                 curl_setopt($ch, CURLOPT_USERPWD, $ParentConfig['Username'] . ':' . $ParentConfig['Password']);
             }
-
-
 
             $result = curl_exec($ch);
             $this->SendDebug('received (curl):', $result, 0);
