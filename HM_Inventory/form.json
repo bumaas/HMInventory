@@ -1,9 +1,7 @@
 {
   "elements":
   [
-    { "type": "Label", "caption": "IP Address of the Homematic Gateway"},
-    { "type": "ValidationTextBox", "name": "Host", "caption": "Host" },
-
+    { "type": "Label", "caption": "This Instance creates a Report with all Homematic Devices."},
     { "type": "Label", "caption": "The Report is created as HTML file if a file name is given"},
     { "type": "ValidationTextBox", "name": "OutputFile", "caption": "Output File"},
 
@@ -42,14 +40,5 @@
   "actions":
   [
     { "type": "Button", "caption": "Create Report", "onClick": "$module = new IPSModule($id); HMI_CreateReport($id); echo $module->Translate('Finished!');" }
-  ],
-  "status":
-  [
-    {
-      "code": 204,
-      "icon": "error",
-      "caption": "IP address is not valid"
-    }
   ]
-
 }

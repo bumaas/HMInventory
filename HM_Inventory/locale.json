@@ -1,8 +1,7 @@
 {
   "translations": {
     "de": {
-      "IP Address of the Homematic Gateway": "IP Adresse des Homematic Gateways",
-      "Host": "Host",
+      "This Instance creates a Report with all Homematic Devices.": "Die Instanz erstellt einen Bericht mit allen Homematic Geräten.",
       "The Report is created as HTML file if a file name is given": "Der Bericht wird als HTML Datei erstellt, wenn ein Dateiname angegeben ist",
       "Output File": "Ausgabedatei",
       "Select the order how the device list should be sorted": "Auswahl der Sortierung, nach der die Geräte aufgelistet werden",
@@ -30,7 +29,6 @@
       "Update Interval": "Aktualisierungsintervall",
       "Minutes": "Minuten",
       "Create Report": "Erzeuge Bericht",
-      "IP address is not valid": "IP Adresse ist nicht gültig",
       "Finished!": "Fertig!"
     }
   }

@@ -11,8 +11,6 @@ include_once __DIR__ . '/../libs/phpxmlrpc-4.3.0/lib/xmlrpc.inc';
 /** @noinspection AutoloadingIssuesInspection */
 class HMInventoryReportCreator extends IPSModule
 {
-    private const STATUS_INST_IP_IS_INVALID = 204; //IP Adresse ist ungültig
-
     // Some color options for the HTML output
     private const BG_COLOR_GLOBAL         = '#181818';         // Global background color
     private const BG_COLOR_INTERFACE_LIST = '#223344';         // Background color for the interface list
@@ -21,6 +19,10 @@ class HMInventoryReportCreator extends IPSModule
     private const BG_COLOR_EVENLINE       = '#1A2B3C';         // Background color for the even lines of the device list
 
     private const VERSION = '1.7.2';
+
+    //property names
+    private const PROP_SAVEDEVICELISTINVARIABLE = 'SaveDeviceListInVariable';
+
 
     // Überschreibt die interne IPS_Create($id) Funktion
     public function Create()
@@ -63,11 +65,20 @@ class HMInventoryReportCreator extends IPSModule
         // Erweiterung für HM-IP und HM-Wired 18.01.2017 by bumaas
 
         // Get the required data from the BidCos-Services (RF, IP, Wired)
-        $IP_adr_BidCos_Service = $this->ReadPropertyString('Host');
 
-        $BidCos_Wired_Service_adr = sprintf('http://%s:2000', $IP_adr_BidCos_Service);
-        $BidCos_RF_Service_adr    = sprintf('http://%s:2001', $IP_adr_BidCos_Service);
-        $BidCos_IP_Service_adr    = sprintf('http://%s:2010', $IP_adr_BidCos_Service);
+        $ParentId = @IPS_GetInstance($this->InstanceID)['ConnectionID'];
+        $this->SendDebug('ParentId:', $ParentId, 0);
+        if ($ParentId === 0){
+            return;
+        }
+
+        $ParentConfig = json_decode(IPS_GetConfiguration($ParentId), true);
+
+        $IP_adr_Homematic = (string) IPS_GetProperty($ParentId, 'Host');
+
+        $BidCos_Wired_Service_adr = sprintf('http://%s:2000', $IP_adr_Homematic);
+        $BidCos_RF_Service_adr    = sprintf('http://%s:2001', $IP_adr_Homematic);
+        $BidCos_IP_Service_adr    = sprintf('http://%s:2010', $IP_adr_Homematic);
 
         $hm_RF_dev_list    = [];
         $hm_IP_dev_list    = [];
@@ -78,6 +89,9 @@ class HMInventoryReportCreator extends IPSModule
 
         // get the RF devices
         $xml_BidCos_RF_client = new xmlrpc_client($BidCos_RF_Service_adr);
+        if ($ParentConfig['Password'] !== '') {
+            $xml_BidCos_RF_client->setCredentials($ParentConfig['Username'], $ParentConfig['Password']);
+        }
         $this->SendDebug('send (xmlrpc):', $BidCos_RF_Service_adr . ':listDevices', 0);
         $xml_rtnmsg = $xml_BidCos_RF_client->send($xml_reqmsg);
         if ($xml_rtnmsg->errno === 0) {
@@ -91,6 +105,9 @@ class HMInventoryReportCreator extends IPSModule
 
         // get the IP devices
         $xml_BidCos_IP_client = new xmlrpc_client($BidCos_IP_Service_adr);
+        if ($ParentConfig['Password'] !== '') {
+            $xml_BidCos_IP_client->setCredentials($ParentConfig['Username'], $ParentConfig['Password']);
+        }
         $xml_reqmsg           = new xmlrpcmsg('listDevices');
         $this->SendDebug('send (xmlrpc):', $BidCos_IP_Service_adr . ':listDevices', 0);
         $xml_rtnmsg = $xml_BidCos_IP_client->send($xml_reqmsg);
@@ -105,6 +122,9 @@ class HMInventoryReportCreator extends IPSModule
 
         // get the Wired devices
         $xml_BidCos_Wired_client = new xmlrpc_client($BidCos_Wired_Service_adr);
+        if ($ParentConfig['Password'] !== '') {
+            $xml_BidCos_Wired_client->setCredentials($ParentConfig['Username'], $ParentConfig['Password']);
+        }
         $xml_reqmsg              = new xmlrpcmsg('listDevices');
         $this->SendDebug('send (xmlrpc):', $BidCos_Wired_Service_adr . ':listDevices', 0);
         $xml_rtnmsg = $xml_BidCos_Wired_client->send($xml_reqmsg);
@@ -160,7 +180,7 @@ class HMInventoryReportCreator extends IPSModule
         //
         foreach (IPS_GetInstanceListByModuleID('{EE4A81C6-5C90-4DB7-AD2F-F6BBD521412E}') as $id) {
             //first check if the device is assigned to the right gateway
-            if ($IP_adr_BidCos_Service !== IPS_GetProperty(IPS_GetInstance($id)['ConnectionID'], 'Host')) {
+            if ($ParentId !== IPS_GetInstance($id)['ConnectionID']){
                 continue;
             }
             $HM_module_num++;
@@ -199,7 +219,7 @@ class HMInventoryReportCreator extends IPSModule
                         $HM_device = $hm_dev['PARENT_TYPE'];
                     }
                     if ($this->ReadPropertyBoolean('ShowHMConfiguratorDeviceNames')) {
-                        $HM_devname = $this->GetHMChannelName($IP_adr_BidCos_Service, $hm_dev['ADDRESS']);
+                        $HM_devname = $this->GetHMChannelName($IP_adr_Homematic, $hm_dev['ADDRESS']);
                     }
                     if ($hm_par_dev !== null) {
                         $HM_FWversion = $hm_par_dev['FIRMWARE'];
@@ -300,7 +320,7 @@ class HMInventoryReportCreator extends IPSModule
                         $HM_device  = $hm_chld_dev['PARENT_TYPE'];
                         $HM_devname = '-';
                         if ($this->ReadPropertyBoolean('ShowHMConfiguratorDeviceNames')) {
-                            $HM_devname = $this->GetHMChannelName($IP_adr_BidCos_Service, $HM_address);
+                            $HM_devname = $this->GetHMChannelName($IP_adr_Homematic, $HM_address);
                         }
 
                         if ($hm_par_dev !== null) {
@@ -476,7 +496,7 @@ class HMInventoryReportCreator extends IPSModule
 
         //print_r($HM_array);
 
-        if ($this->ReadPropertyBoolean('SaveDeviceListInVariable')) {
+        if ($this->ReadPropertyBoolean(self::PROP_SAVEDEVICELISTINVARIABLE)) {
             //SetValueString($this->GetIDForIdent('DeviceList'), json_encode($HM_array));
             $this->SetValue('DeviceList', json_encode($HM_array)); //array in String variable speichern
         }
@@ -682,8 +702,7 @@ class HMInventoryReportCreator extends IPSModule
             }
         }
 
-        $this->RegisterPropertyString('Host', $host);
-        $this->RegisterPropertyBoolean('SaveDeviceListInVariable', false);
+        $this->RegisterPropertyBoolean(self::PROP_SAVEDEVICELISTINVARIABLE, false);
         $this->RegisterPropertyBoolean('SaveHMArrayInVariable', false);
         $this->RegisterPropertyString('OutputFile', IPS_GetKernelDir() . 'HM_inventory.html');
         $this->RegisterPropertyInteger('SortOrder', 0);
@@ -697,22 +716,18 @@ class HMInventoryReportCreator extends IPSModule
 
     private function RegisterVariables(): void
     {
-        if ($this->ReadPropertyBoolean('SaveDeviceListInVariable')) {
+        if ($this->ReadPropertyBoolean(self::PROP_SAVEDEVICELISTINVARIABLE)) {
             $this->RegisterVariableString('DeviceList', 'Device Liste', '', 1);
         }
     }
 
-    private function SetInstanceStatus(): bool
+    private function SetInstanceStatus(): void
     {
-        //IP Prüfen
-        $ip = $this->ReadPropertyString('Host');
-        if (filter_var($ip, FILTER_VALIDATE_IP)) {
+        if ($this->HasActiveParent()) {
             $this->SetStatus(IS_ACTIVE);
         } else {
-            $this->SetStatus(self::STATUS_INST_IP_IS_INVALID); //IP Adresse ist ungültig
+            $this->SetStatus(IS_INACTIVE);
         }
-
-        return true;
     }
 
     private static function usort_HM_address(array $a, array $b)
@@ -814,6 +829,16 @@ class HMInventoryReportCreator extends IPSModule
             curl_setopt($ch, CURLOPT_CONNECTTIMEOUT_MS, 1000);
             curl_setopt($ch, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
             curl_setopt($ch, CURLOPT_TIMEOUT_MS, 5000);
+
+            $ParentId = @IPS_GetInstance($this->InstanceID)['ConnectionID'];
+            $ParentConfig = json_decode(IPS_GetConfiguration($ParentId), true);
+            if ($ParentConfig['Password'] != '') {
+                curl_setopt($ch, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
+                curl_setopt($ch, CURLOPT_USERPWD, $ParentConfig['Username'] . ':' . $ParentConfig['Password']);
+            }
+
+
+
             $result = curl_exec($ch);
             $this->SendDebug('received (curl):', $result, 0);
 
