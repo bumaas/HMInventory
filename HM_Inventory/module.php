@@ -66,7 +66,7 @@ class HMInventoryReportCreator extends IPSModule
         // Get the required data from the BidCos-Services (RF, IP, Wired)
 
         $ParentId = @IPS_GetInstance($this->InstanceID)['ConnectionID'];
-        $this->SendDebug('ParentId:', $ParentId, 0);
+        $this->SendDebug('Parent', sprintf('%s (#%s)', IPS_GetName($ParentId), $ParentId), 0);
         if ($ParentId === 0){
             return;
         }
@@ -76,9 +76,9 @@ class HMInventoryReportCreator extends IPSModule
         $IP_adr_Homematic = (string) IPS_GetProperty($ParentId, 'Host');
 
         if ($ParentConfig['UseSSL']) {
-            $BidCos_Wired_Service_adr = sprintf('http://%s:%s', $IP_adr_Homematic, $ParentConfig['WRSSLPort']);
-            $BidCos_RF_Service_adr    = sprintf('http://%s:%s', $IP_adr_Homematic, $ParentConfig['RFSSLPort']);
-            $BidCos_IP_Service_adr    = sprintf('http://%s:%s', $IP_adr_Homematic, $ParentConfig['IPSSLPort']);
+            $BidCos_Wired_Service_adr = sprintf('https://%s:%s', $IP_adr_Homematic, $ParentConfig['WRSSLPort']);
+            $BidCos_RF_Service_adr    = sprintf('https://%s:%s', $IP_adr_Homematic, $ParentConfig['RFSSLPort']);
+            $BidCos_IP_Service_adr    = sprintf('https://%s:%s', $IP_adr_Homematic, $ParentConfig['IPSSLPort']);
         } else {
             $BidCos_Wired_Service_adr = sprintf('http://%s:%s', $IP_adr_Homematic, $ParentConfig['WRPort']);
             $BidCos_RF_Service_adr    = sprintf('http://%s:%s', $IP_adr_Homematic, $ParentConfig['RFPort']);
@@ -90,10 +90,16 @@ class HMInventoryReportCreator extends IPSModule
         $hm_Wired_dev_list = [];
         $err               = 0;
 
+
+        //print_r($this->LoadHMScript($IP_adr_Homematic, $BidCos_RF_Service_adr, 'listDevices'))
         $xml_reqmsg = new xmlrpcmsg('listDevices');
 
         // get the RF devices
         $xml_BidCos_RF_client = new xmlrpc_client($BidCos_RF_Service_adr);
+        if ($ParentConfig['UseSSL']) {
+            $xml_BidCos_RF_client->verifyhost = false;
+            $xml_BidCos_RF_client->verifypeer = false;
+        }
         if ($ParentConfig['Password'] !== '') {
             $xml_BidCos_RF_client->setCredentials($ParentConfig['Username'], $ParentConfig['Password']);
         }
@@ -110,6 +116,10 @@ class HMInventoryReportCreator extends IPSModule
 
         // get the IP devices
         $xml_BidCos_IP_client = new xmlrpc_client($BidCos_IP_Service_adr);
+        if ($ParentConfig['UseSSL']) {
+            $xml_BidCos_IP_client->verifyhost = false;
+            $xml_BidCos_IP_client->verifypeer = false;
+        }
         if ($ParentConfig['Password'] !== '') {
             $xml_BidCos_IP_client->setCredentials($ParentConfig['Username'], $ParentConfig['Password']);
         }
@@ -127,6 +137,10 @@ class HMInventoryReportCreator extends IPSModule
 
         // get the Wired devices
         $xml_BidCos_Wired_client = new xmlrpc_client($BidCos_Wired_Service_adr);
+        if ($ParentConfig['UseSSL']) {
+            $xml_BidCos_Wired_client->verifyhost = false;
+            $xml_BidCos_Wired_client->verifypeer = false;
+        }
         if ($ParentConfig['Password'] !== '') {
             $xml_BidCos_Wired_client->setCredentials($ParentConfig['Username'], $ParentConfig['Password']);
         }
@@ -827,7 +841,9 @@ class HMInventoryReportCreator extends IPSModule
             $ParentConfig = json_decode(IPS_GetConfiguration($ParentId), true);
 
             if ($ParentConfig['UseSSL']) {
-                $ch = curl_init(sprintf('http://%s:%s/%s', $HMAddress, $ParentConfig['HSSSLPort'], $url));
+                $ch = curl_init(sprintf('https://%s:%s/%s', $HMAddress, $ParentConfig['HSSSLPort'], $url));
+                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+                curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
             } else {
                 $ch = curl_init(sprintf('http://%s:%s/%s', $HMAddress, $ParentConfig['HSPort'], $url));
             }
