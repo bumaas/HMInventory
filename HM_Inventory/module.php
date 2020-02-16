@@ -1,4 +1,4 @@
-<?php
+<?php /** @noinspection CurlSslServerSpoofingInspection */
 
 declare(strict_types=1);
 
@@ -18,7 +18,9 @@ class HMInventoryReportCreator extends IPSModule
     private const BG_COLOR_ODDLINE        = '#181818';         // Background color for the odd lines of the device list
     private const BG_COLOR_EVENLINE       = '#1A2B3C';         // Background color for the even lines of the device list
 
-    private const VERSION = '1.7.2';
+    private const VERSION = '1.9.3';
+
+    private const PROP_OUTPUTFILE = 'OutputFile';
 
     //property names
     private const PROP_SAVEDEVICELISTINVARIABLE = 'SaveDeviceListInVariable';
@@ -36,15 +38,36 @@ class HMInventoryReportCreator extends IPSModule
 
     public function ApplyChanges()
     {
+        //we will wait until the kernel is ready
+        $this->RegisterMessage(0, IPS_KERNELMESSAGE);
+
         //Never delete this line!
         parent::ApplyChanges();
+
+        if (IPS_GetKernelRunlevel() !== KR_READY) {
+            return;
+        }
 
         $this->SetTimerInterval('Update', $this->ReadPropertyInteger('UpdateInterval') * 60 * 1000);
 
         $this->RegisterVariables();
 
         $this->SetInstanceStatus();
+
+        $this->SetSummary($this->ReadPropertyString(self::PROP_OUTPUTFILE));
     }
+
+    public function MessageSink($TimeStamp, $SenderID, $Message, $Data)
+    {
+        parent::MessageSink($TimeStamp, $SenderID, $Message, $Data);
+
+        if ($Message === IPS_KERNELMESSAGE) {
+            if ($Data[0] === KR_READY) {
+                $this->ApplyChanges();
+            }
+        }
+    }
+
 
     /**
      * Die folgenden Funktionen stehen automatisch zur Verfügung, wenn das Modul über die "Module Control" eingefügt wurden.
@@ -67,13 +90,13 @@ class HMInventoryReportCreator extends IPSModule
 
         $ParentId = @IPS_GetInstance($this->InstanceID)['ConnectionID'];
         $this->SendDebug('Parent', sprintf('%s (#%s)', IPS_GetName($ParentId), $ParentId), 0);
-        if ($ParentId === 0){
+        if ($ParentId === 0) {
             return;
         }
 
         $ParentConfig = json_decode(IPS_GetConfiguration($ParentId), true);
 
-        $IP_adr_Homematic = (string) IPS_GetProperty($ParentId, 'Host');
+        $IP_adr_Homematic = (string)IPS_GetProperty($ParentId, 'Host');
 
         if ($ParentConfig['UseSSL']) {
             $BidCos_Wired_Service_adr = sprintf('https://%s:%s', $IP_adr_Homematic, $ParentConfig['WRSSLPort']);
@@ -90,15 +113,14 @@ class HMInventoryReportCreator extends IPSModule
         $hm_Wired_dev_list = [];
         $err               = 0;
 
-
         //print_r($this->LoadHMScript($IP_adr_Homematic, $BidCos_RF_Service_adr, 'listDevices'))
         $xml_reqmsg = new xmlrpcmsg('listDevices');
 
         // get the RF devices
         $xml_BidCos_RF_client = new xmlrpc_client($BidCos_RF_Service_adr);
         if ($ParentConfig['UseSSL']) {
-            $xml_BidCos_RF_client->verifyhost = false;
-            $xml_BidCos_RF_client->verifypeer = false;
+            $xml_BidCos_RF_client->setSSLVerifyHost(0);
+            $xml_BidCos_RF_client->setSSLVerifyPeer(false);
         }
         if ($ParentConfig['Password'] !== '') {
             $xml_BidCos_RF_client->setCredentials($ParentConfig['Username'], $ParentConfig['Password']);
@@ -117,13 +139,13 @@ class HMInventoryReportCreator extends IPSModule
         // get the IP devices
         $xml_BidCos_IP_client = new xmlrpc_client($BidCos_IP_Service_adr);
         if ($ParentConfig['UseSSL']) {
-            $xml_BidCos_IP_client->verifyhost = false;
-            $xml_BidCos_IP_client->verifypeer = false;
+            $xml_BidCos_IP_client->setSSLVerifyHost(0);
+            $xml_BidCos_IP_client->setSSLVerifyPeer(false);
         }
         if ($ParentConfig['Password'] !== '') {
             $xml_BidCos_IP_client->setCredentials($ParentConfig['Username'], $ParentConfig['Password']);
         }
-        $xml_reqmsg           = new xmlrpcmsg('listDevices');
+        $xml_reqmsg = new xmlrpcmsg('listDevices');
         $this->SendDebug('send (xmlrpc):', $BidCos_IP_Service_adr . ':listDevices', 0);
         $xml_rtnmsg = $xml_BidCos_IP_client->send($xml_reqmsg);
         if ($xml_rtnmsg->errno === 0) {
@@ -138,13 +160,13 @@ class HMInventoryReportCreator extends IPSModule
         // get the Wired devices
         $xml_BidCos_Wired_client = new xmlrpc_client($BidCos_Wired_Service_adr);
         if ($ParentConfig['UseSSL']) {
-            $xml_BidCos_Wired_client->verifyhost = false;
-            $xml_BidCos_Wired_client->verifypeer = false;
+            $xml_BidCos_Wired_client->setSSLVerifyHost(0);
+            $xml_BidCos_Wired_client->setSSLVerifyPeer(false);
         }
         if ($ParentConfig['Password'] !== '') {
             $xml_BidCos_Wired_client->setCredentials($ParentConfig['Username'], $ParentConfig['Password']);
         }
-        $xml_reqmsg              = new xmlrpcmsg('listDevices');
+        $xml_reqmsg = new xmlrpcmsg('listDevices');
         $this->SendDebug('send (xmlrpc):', $BidCos_Wired_Service_adr . ':listDevices', 0);
         $xml_rtnmsg = $xml_BidCos_Wired_client->send($xml_reqmsg);
         if ($xml_rtnmsg->errno === 0) {
@@ -199,7 +221,7 @@ class HMInventoryReportCreator extends IPSModule
         //
         foreach (IPS_GetInstanceListByModuleID('{EE4A81C6-5C90-4DB7-AD2F-F6BBD521412E}') as $id) {
             //first check if the device is assigned to the right gateway
-            if ($ParentId !== IPS_GetInstance($id)['ConnectionID']){
+            if ($ParentId !== IPS_GetInstance($id)['ConnectionID']) {
                 continue;
             }
             $HM_module_num++;
@@ -225,6 +247,8 @@ class HMInventoryReportCreator extends IPSModule
             $HM_AES_active = '-';
             $hm_chld_dev   = null;
             $hm_par_dev    = null;
+
+            set_time_limit(60); //Abfragen dauern manchmal länger als 30 Sekunden
 
             foreach ($hm_dev_list as $hm_dev) {
                 if ($hm_dev['ADDRESS'] === $HM_address) {
@@ -300,7 +324,8 @@ class HMInventoryReportCreator extends IPSModule
                 'HM_direction'    => $HM_direction,
                 'HM_AES_active'   => $HM_AES_active,
                 'HM_Interface'    => $HM_Interface,
-                'HM_Roaming'      => $HM_Roaming];
+                'HM_Roaming'      => $HM_Roaming
+            ];
         }
 
         // Add HM_devices known by BidCos but not present in IP-Symcon
@@ -377,7 +402,8 @@ class HMInventoryReportCreator extends IPSModule
                             'HM_direction'    => $HM_direction,
                             'HM_AES_active'   => $HM_AES_active,
                             'HM_Interface'    => $HM_Interface,
-                            'HM_Roaming'      => $HM_Roaming];
+                            'HM_Roaming'      => $HM_Roaming
+                        ];
                     }
                 }
             }
@@ -428,7 +454,8 @@ class HMInventoryReportCreator extends IPSModule
                                     $hm_levels[$hm_ifce['ADDRESS']][0],
                                     $hm_levels[$hm_ifce['ADDRESS']][1],
                                     $HM_dev['HM_Interface'] === $hm_ifce['ADDRESS'],
-                                    false];
+                                    false
+                                ];
                                 if ($hm_levels[$hm_ifce['ADDRESS']][1] !== 65536) {
                                     if ($best_lvl_ifce === -1) {
                                         $best_lvl_ifce = $ifce_no;
@@ -471,7 +498,8 @@ class HMInventoryReportCreator extends IPSModule
                 $xml_method = new xmlrpcmsg(
                     'getParamset', [
                                      new xmlrpcval($hm_adr[0] . ':0', 'string'),
-                                     new xmlrpcval('VALUES', 'string')]
+                                     new xmlrpcval('VALUES', 'string')
+                                 ]
                 );
                 $xml_rtnmsg = $xml_BidCos_IP_client->send($xml_method);
                 if ($xml_rtnmsg->errno === 0) {
@@ -611,7 +639,6 @@ class HMInventoryReportCreator extends IPSModule
                 if (isset($HM_dev['HM_levels'])) {
                     foreach ($HM_dev['HM_levels'] as $lci => $lciValue) {
                         if (isset($HM_dev['HM_levels'][$lci])) {
-
                             // Interface with best levels gets different color
                             if (!isset($lciValue[3])) {
                                 echo $HM_dev['HM_device'] . PHP_EOL;
@@ -634,18 +661,21 @@ class HMInventoryReportCreator extends IPSModule
 
                             //rx_lvl
                             if ($lciValue[0] !== 65536) {
-                                $rx_strg = (string) $lciValue[0];
+                                $rx_strg = (string)$lciValue[0];
                             } else {
                                 $rx_strg = '--';
                             }
                             //tx_lvl
                             if ($lciValue[1] !== 65536) {
-                                $tx_strg = (string) $lciValue[1];
+                                $tx_strg = (string)$lciValue[1];
                             } else {
                                 $tx_strg = '--';
                             }
                             $lvl_strg = sprintf(
-                                $fmt_strg, $lvl_strg_color, $rx_strg, $tx_strg
+                                $fmt_strg,
+                                $lvl_strg_color,
+                                $rx_strg,
+                                $tx_strg
                             );
 
                             $HTML_dvcs .= $dtdvc_td_ac_b . $lvl_strg . $dtdvc_td_e;
@@ -689,7 +719,7 @@ class HMInventoryReportCreator extends IPSModule
 
         // Output the results
 
-        $OutputFileName = $this->ReadPropertyString('OutputFile');
+        $OutputFileName = $this->ReadPropertyString(self::PROP_OUTPUTFILE);
         if ($OutputFileName) {
             $HTML_file = fopen($OutputFileName, 'wb');
             fwrite($HTML_file, '<html><head><style type="text/css">');
@@ -723,7 +753,7 @@ class HMInventoryReportCreator extends IPSModule
 
         $this->RegisterPropertyBoolean(self::PROP_SAVEDEVICELISTINVARIABLE, false);
         $this->RegisterPropertyBoolean('SaveHMArrayInVariable', false);
-        $this->RegisterPropertyString('OutputFile', IPS_GetKernelDir() . 'HM_inventory.html');
+        $this->RegisterPropertyString(self::PROP_OUTPUTFILE, IPS_GetKernelDir() . 'HM_inventory.html');
         $this->RegisterPropertyInteger('SortOrder', 0);
         $this->RegisterPropertyBoolean('ShowVirtualKeyEntries', false);
         $this->RegisterPropertyBoolean('ShowMaintenanceEntries', true);
@@ -756,7 +786,7 @@ class HMInventoryReportCreator extends IPSModule
         $a_adr = explode(':', $a['HM_address']);
         $b_adr = explode(':', $b['HM_address']);
         if (count($a_adr) === 2 && count($b_adr) === 2 && strcasecmp($a_adr[0], $b_adr[0]) === 0) {
-            $result = (int) $a_adr[1] > $b_adr[1];
+            $result = (int)$a_adr[1] > $b_adr[1];
         }
 
         return $result;
@@ -837,7 +867,7 @@ class HMInventoryReportCreator extends IPSModule
 
             $this->SendDebug('send (curl):', $HMScript, 0);
 
-            $ParentId = @IPS_GetInstance($this->InstanceID)['ConnectionID'];
+            $ParentId     = @IPS_GetInstance($this->InstanceID)['ConnectionID'];
             $ParentConfig = json_decode(IPS_GetConfiguration($ParentId), true);
 
             if ($ParentConfig['UseSSL']) {
@@ -858,7 +888,7 @@ class HMInventoryReportCreator extends IPSModule
             curl_setopt($ch, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
             curl_setopt($ch, CURLOPT_TIMEOUT_MS, 5000);
 
-            if ($ParentConfig['Password'] != '') {
+            if ($ParentConfig['Password'] !== '') {
                 curl_setopt($ch, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
                 curl_setopt($ch, CURLOPT_USERPWD, $ParentConfig['Username'] . ':' . $ParentConfig['Password']);
             }
