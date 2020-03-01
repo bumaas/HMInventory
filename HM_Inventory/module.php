@@ -18,7 +18,7 @@ class HMInventoryReportCreator extends IPSModule
     private const BG_COLOR_ODDLINE        = '#181818';         // Background color for the odd lines of the device list
     private const BG_COLOR_EVENLINE       = '#1A2B3C';         // Background color for the even lines of the device list
 
-    private const VERSION = '1.9.3';
+    private const VERSION = '1.9.4';
 
     private const PROP_OUTPUTFILE = 'OutputFile';
 
@@ -742,15 +742,6 @@ class HMInventoryReportCreator extends IPSModule
 
     private function RegisterProperties(): void
     {
-        $host = '';
-        if (IPS_GetKernelRunlevel() === KR_READY) { //Kernel ready
-            //set default of host to host of first HM instance
-            $HMinstanceList = IPS_GetInstanceListByModuleID('{A151ECE9-D733-4FB9-AA15-7F7DD10C58AF}');
-            if (count($HMinstanceList) > 0) {
-                $host = IPS_GetProperty($HMinstanceList[0], 'Host');
-            }
-        }
-
         $this->RegisterPropertyBoolean(self::PROP_SAVEDEVICELISTINVARIABLE, false);
         $this->RegisterPropertyBoolean('SaveHMArrayInVariable', false);
         $this->RegisterPropertyString(self::PROP_OUTPUTFILE, IPS_GetKernelDir() . 'HM_inventory.html');

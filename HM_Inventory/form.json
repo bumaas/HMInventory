@@ -37,6 +37,7 @@
     { "type": "Label", "caption": "If the report should be created automatically select an update interval"},
     { "type": "NumberSpinner", "name": "UpdateInterval", "caption": "Update Interval", "suffix": "Minutes" }
   ],
+  "status": [],
   "actions":
   [
     { "type": "Button", "caption": "Create Report", "onClick": "$module = new IPSModule($id); HMI_CreateReport($id); echo $module->Translate('Finished!');" }
