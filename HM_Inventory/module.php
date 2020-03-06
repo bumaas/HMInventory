@@ -18,7 +18,7 @@ class HMInventoryReportCreator extends IPSModule
     private const BG_COLOR_ODDLINE        = '#181818';         // Background color for the odd lines of the device list
     private const BG_COLOR_EVENLINE       = '#1A2B3C';         // Background color for the even lines of the device list
 
-    private const VERSION = '1.9.4';
+    private const VERSION = '1.9.5';
 
     private const PROP_OUTPUTFILE = 'OutputFile';
 
@@ -73,7 +73,7 @@ class HMInventoryReportCreator extends IPSModule
      * Die folgenden Funktionen stehen automatisch zur Verfügung, wenn das Modul über die "Module Control" eingefügt wurden.
      * Die Funktionen werden, mit dem selbst eingerichteten Prefix, in PHP und JSON-RPC wie folgt zur Verfügung gestellt:.
      */
-    public function CreateReport(): void
+    public function CreateReport(): bool
     {
         // originally written by Andreas Bahrdt (HM-Inventory)
         //
@@ -91,7 +91,13 @@ class HMInventoryReportCreator extends IPSModule
         $ParentId = @IPS_GetInstance($this->InstanceID)['ConnectionID'];
         $this->SendDebug('Parent', sprintf('%s (#%s)', IPS_GetName($ParentId), $ParentId), 0);
         if ($ParentId === 0) {
-            return;
+            echo sprintf ('Gateway is not configured!' . PHP_EOL . PHP_EOL);
+            return false;
+        }
+
+        if ($this->GetStatus() !== IS_ACTIVE){
+            echo sprintf ('Instance is not active!' . PHP_EOL . PHP_EOL);
+            return false;
         }
 
         $ParentConfig = json_decode(IPS_GetConfiguration($ParentId), true);
@@ -721,7 +727,11 @@ class HMInventoryReportCreator extends IPSModule
 
         $OutputFileName = $this->ReadPropertyString(self::PROP_OUTPUTFILE);
         if ($OutputFileName) {
-            $HTML_file = fopen($OutputFileName, 'wb');
+            $HTML_file = @fopen($OutputFileName, 'wb');
+            if ($HTML_file === false){
+                echo sprintf ('File "%s" not writable!' . PHP_EOL . PHP_EOL, $OutputFileName);
+                return false;
+            }
             fwrite($HTML_file, '<html><head><style type="text/css">');
             fwrite($HTML_file, 'html,body {font-family:Arial,Helvetica,sans-serif;font-size:12px;background-color:#000000;color:#dddddd;}');
             fwrite($HTML_file, '</style></head><body>');
@@ -736,8 +746,10 @@ class HMInventoryReportCreator extends IPSModule
             fwrite($HTML_file, $HTML_notes);
             fwrite($HTML_file, $HTML_end);
             fwrite($HTML_file, '</body></html>');
-            fclose($HTML_file);
+            return fclose($HTML_file);
         }
+
+        return false;
     }
 
     private function RegisterProperties(): void

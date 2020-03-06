@@ -29,7 +29,8 @@
       "Update Interval": "Aktualisierungsintervall",
       "Minutes": "Minuten",
       "Create Report": "Erzeuge Bericht",
-      "Finished!": "Fertig!"
-    }
+      "Finished!": "Fertig!",
+      "Error!": "Fehler!"
+   }
   }
 }

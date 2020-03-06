@@ -40,6 +40,6 @@
   "status": [],
   "actions":
   [
-    { "type": "Button", "caption": "Create Report", "onClick": "$module = new IPSModule($id); HMI_CreateReport($id); echo $module->Translate('Finished!');" }
+    { "type": "Button", "caption": "Create Report", "onClick": "$module = new IPSModule($id); if (HMI_CreateReport($id)){echo $module->Translate('Finished!');} else {echo $module->Translate('Error!');}"}
   ]
 }

@@ -37,7 +37,7 @@ Zusätzlich wird die Liste der Devices bei Bedarf noch json-encoded in eine Stri
 
 ## 2. Voraussetzungen
 
- - Symcon 5.0
+ - Symcon 5.2
 
 ## 3. Installation
 
@@ -55,9 +55,9 @@ In Symcon an beliebiger Stelle `Instanz hinzufügen` auswählen und `HM Inventor
 ## 4. Funktionsreferenz
 
 ```php
-HMI_CreateReport(int $InstanceID)
+HMI_CreateReport(int $InstanceID): bool
 ```
-Erstellt den Report mit allen Homeatic Devices entsprechend der in der Instanz eingestellten Eigenschaften.
+Erstellt den Report mit allen Homeatic Devices entsprechend der in der Instanz eingestellten Eigenschaften. Returniert mit false, falls die Erstellung fehlschlägt, sonst mit true.
 
 
 ## 5. Konfiguration
@@ -66,7 +66,7 @@ Erstellt den Report mit allen Homeatic Devices entsprechend der in der Instanz e
 
 | Eigenschaft | Typ     | Standardwert            | Funktion                                  |
 | :--------- | :-----: | :------------------------| :--------------------------------------- |
-| OutputFile  | string  | 'HM_inventory.html' im IPS Kernel Verzeichnis     | wenn ein Dateiname angegeben ist, wird die Ausgabe im HTML Format in diese Datei geschrieben |
+| OutputFile  | string  | \<IPS Kernel Verzeichnis>/HM_inventory.html     | wenn ein Dateiname angegeben ist, wird die Ausgabe im HTML Format in diese Datei geschrieben |
 | SortOrder   | integer | 0                       | Sortierreihenfolge der HM Devices in der Ausgabeliste:<br>0 - HM address (default)<br>1 - HM device type<br>2 - HM channel type<br>3 - IPS device name<br>4 - HM device name (nur in Verbindung mit ShowHMConfiguratorDeviceNames == true)|
 | ShowLongIPSDeviceNames   | boolean | false      | legt fest, ob IPS Namen mit oder ohne vollständigem Pfad ausgegeben werden sollen |
 | ShowVirtualKeyEntries   | boolean | false       | legt fest, ob die Virtuellen Kanäle der Homematic ausgegeben werden sollen |
