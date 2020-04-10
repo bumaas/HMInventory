@@ -604,8 +604,9 @@ class HMInventoryReportCreator extends IPSModule
         foreach ($hm_BidCos_Ifc_list as $hm_ifce) {
             $dtifc_td_b = "<td><font size='2' color='#EEEEEE'>" . ($hm_ifce['DEFAULT'] ? '<i>' : '');
             $dtifc_td_e = ($hm_ifce['DEFAULT'] ? '</i>' : '') . '</font></td>';
-            $dsc_strg   = sprintf('%sconnected', $hm_ifce['CONNECTED'] ? '' : 'Not ');
-            $HTML_ifcs  .= '<tr>' . $dtifc_td_b . 'Interface: ' . $hm_ifce['ADDRESS'] . '&nbsp' . $dtifc_td_e;
+            $dsc_strg   = sprintf('%s', $hm_ifce['CONNECTED'] ? 'connected' : 'Not connected');
+            $ifce_info = sprintf('%s (Fw: %s, DC: %s%%)', $hm_ifce['ADDRESS'], $hm_ifce['FIRMWARE_VERSION'], $hm_ifce['DUTY_CYCLE']);
+            $HTML_ifcs  .= '<tr>' . $dtifc_td_b . 'Interface: ' . $ifce_info . '&nbsp' . $dtifc_td_e;
             $HTML_ifcs  .= $dtifc_td_b . $hm_ifce['DESCRIPTION'] . $dtifc_td_e . $dtifc_td_b . $dsc_strg . $dtifc_td_e . '</tr>';
         }
         $HTML_ifcs .= '</table></td></tr>';
