@@ -114,7 +114,7 @@ class HMInventoryReportCreator extends IPSModule
 
         $filename      = __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . 'library.json';
         $library       = json_decode(file_get_contents($filename), true);
-        $moduleVersion = sprintf('%s.%s (%s)', $library['version'], $library['build'], date('Ymd', $library['date']));
+        $moduleVersion = sprintf('%s.%s', $library['version'], $library['build']);
 
 
         $hm_RF_dev_list                = [];
@@ -125,20 +125,10 @@ class HMInventoryReportCreator extends IPSModule
         $hm_Wired_parent_devices_count = 0;
         $err                           = 0;
 
-        //print_r($this->LoadHMScript($IP_adr_Homematic, $BidCos_RF_Service_adr, 'listDevices'))
-        $xml_reqmsg = new xmlrpcmsg('listDevices');
+        //print_r($this->LoadHMScript($IP_adr_Homematic, $BidCos_RF_Service_adr, 'listDevices'));
 
         // get the RF devices
-        $xml_BidCos_RF_client = new xmlrpc_client($BidCos_RF_Service_adr);
-        if ($ParentConfig['UseSSL']) {
-            $xml_BidCos_RF_client->setSSLVerifyHost(0);
-            $xml_BidCos_RF_client->setSSLVerifyPeer(false);
-        }
-        if ($ParentConfig['Password'] !== '') {
-            $xml_BidCos_RF_client->setCredentials($ParentConfig['Username'], $ParentConfig['Password']);
-        }
-        $this->SendDebug('send (xmlrpc):', $BidCos_RF_Service_adr . ':listDevices', 0);
-        $xml_rtnmsg = $xml_BidCos_RF_client->send($xml_reqmsg);
+        $xml_rtnmsg = $this->SendRequestMessage('listDevices', [], $BidCos_RF_Service_adr, $ParentConfig['UseSSL'], $ParentConfig['Password'], $ParentConfig['Username']);
         if ($xml_rtnmsg->errno === 0) {
             $this->SendDebug('received (xmlrpc):', json_encode($xml_rtnmsg->value()), 0);
             $hm_RF_dev_list = php_xmlrpc_decode($xml_rtnmsg->value());
@@ -156,17 +146,7 @@ class HMInventoryReportCreator extends IPSModule
         }
 
         // get the IP devices
-        $xml_BidCos_IP_client = new xmlrpc_client($BidCos_IP_Service_adr);
-        if ($ParentConfig['UseSSL']) {
-            $xml_BidCos_IP_client->setSSLVerifyHost(0);
-            $xml_BidCos_IP_client->setSSLVerifyPeer(false);
-        }
-        if ($ParentConfig['Password'] !== '') {
-            $xml_BidCos_IP_client->setCredentials($ParentConfig['Username'], $ParentConfig['Password']);
-        }
-        $xml_reqmsg = new xmlrpcmsg('listDevices');
-        $this->SendDebug('send (xmlrpc):', $BidCos_IP_Service_adr . ':listDevices', 0);
-        $xml_rtnmsg = $xml_BidCos_IP_client->send($xml_reqmsg);
+        $xml_rtnmsg = $this->SendRequestMessage('listDevices', [], $BidCos_IP_Service_adr, $ParentConfig['UseSSL'], $ParentConfig['Password'], $ParentConfig['Username']);
         if ($xml_rtnmsg->errno === 0) {
             $this->SendDebug('received (xmlrpc):', json_encode($xml_rtnmsg->value()), 0);
             $hm_IP_dev_list = php_xmlrpc_decode($xml_rtnmsg->value());
@@ -183,17 +163,7 @@ class HMInventoryReportCreator extends IPSModule
         }
 
         // get the Wired devices
-        $xml_BidCos_Wired_client = new xmlrpc_client($BidCos_Wired_Service_adr);
-        if ($ParentConfig['UseSSL']) {
-            $xml_BidCos_Wired_client->setSSLVerifyHost(0);
-            $xml_BidCos_Wired_client->setSSLVerifyPeer(false);
-        }
-        if ($ParentConfig['Password'] !== '') {
-            $xml_BidCos_Wired_client->setCredentials($ParentConfig['Username'], $ParentConfig['Password']);
-        }
-        $xml_reqmsg = new xmlrpcmsg('listDevices');
-        $this->SendDebug('send (xmlrpc):', $BidCos_Wired_Service_adr . ':listDevices', 0);
-        $xml_rtnmsg = $xml_BidCos_Wired_client->send($xml_reqmsg);
+        $xml_rtnmsg = $this->SendRequestMessage('listDevices', [], $BidCos_Wired_Service_adr, $ParentConfig['UseSSL'], $ParentConfig['Password'], $ParentConfig['Username']);
         if ($xml_rtnmsg->errno === 0) {
             $this->SendDebug('received (xmlrpc):', json_encode($xml_rtnmsg->value()), 0);
             $hm_Wired_dev_list = php_xmlrpc_decode($xml_rtnmsg->value());
@@ -217,12 +187,14 @@ class HMInventoryReportCreator extends IPSModule
         //print_r($hm_dev_list);
 
         // get all BidCos Interfaces
-        $xml_reqmsg = new xmlrpcmsg('listBidcosInterfaces');
-        $this->SendDebug('send (xmlrpc):', $BidCos_RF_Service_adr . ':listBidcosInterfaces', 0);
-        $xml_rtnmsg = $xml_BidCos_RF_client->send($xml_reqmsg);
+        $xml_rtnmsg = $this->SendRequestMessage('listBidcosInterfaces', [], $BidCos_RF_Service_adr, $ParentConfig['UseSSL'], $ParentConfig['Password'], $ParentConfig['Username']);
+
         if ($xml_rtnmsg->errno === 0) {
             $this->SendDebug('received (xmlrpc):', json_encode($xml_rtnmsg->value()), 0);
             $hm_BidCos_Ifc_list = php_xmlrpc_decode($xml_rtnmsg->value());
+            //nach 'DEFAULT' sortieren, damit die CCU an erster Stelle steht.
+            $default = array_column($hm_BidCos_Ifc_list, 'DEFAULT');
+            array_multisort($default, SORT_DESC, $hm_BidCos_Ifc_list);
             //print_r($hm_BidCos_Ifc_list);
         } else {
             $this->SendDebug('Error', "Can't get HM-interface information from the BidCos-RF-Service", 0);
@@ -457,8 +429,7 @@ class HMInventoryReportCreator extends IPSModule
 
         // Request tx/rx RF-levels from BidCos-RF-Service
         //
-        $xml_reqmsg = new xmlrpcmsg('rssiInfo');
-        $xml_rtnmsg = $xml_BidCos_RF_client->send($xml_reqmsg);
+        $xml_rtnmsg = $this->SendRequestMessage('rssiInfo', [], $BidCos_RF_Service_adr, $ParentConfig['UseSSL'], $ParentConfig['Password'], $ParentConfig['Username']);
 
         $hm_lvl_list = [];
         if ($xml_rtnmsg->errno === 0) {
@@ -526,13 +497,12 @@ class HMInventoryReportCreator extends IPSModule
                 continue;
             }
             if ($hm_adr[0] !== $previous_hm_adr) {
-                $xml_method = new xmlrpcmsg(
-                    'getParamset', [
-                                     new xmlrpcval($hm_adr[0] . ':0', 'string'),
-                                     new xmlrpcval('VALUES', 'string')
-                                 ]
-                );
-                $xml_rtnmsg = $xml_BidCos_IP_client->send($xml_method);
+                $params = [
+                    new xmlrpcval($hm_adr[0] . ':0', 'string'),
+                    new xmlrpcval('VALUES', 'string')
+                ];
+                $xml_rtnmsg = $this->SendRequestMessage('getParamset', $params, $BidCos_IP_Service_adr, $ParentConfig['UseSSL'], $ParentConfig['Password'], $ParentConfig['Username']);
+
                 if ($xml_rtnmsg->errno === 0) {
                     $HM_ParamSet = php_xmlrpc_decode($xml_rtnmsg->value());
                     //print_r($HM_ParamSet);
@@ -690,12 +660,6 @@ class HMInventoryReportCreator extends IPSModule
                                 $lvl_strg_color = '<font color=#DDDDDD>';
                             }
 
-                            if (($HM_dev['HM_Roaming'] === '+') || $lciValue[2]) {
-                                $fmt_strg = '%s<ins>%s &#047 %s</ins></font>';
-                            } else {
-                                $fmt_strg = '%s%s &#047 %s</font>';
-                            }
-
                             //rx_lvl
                             if ($lciValue[0] !== 65536) {
                                 $rx_strg = (string)$lciValue[0];
@@ -708,12 +672,21 @@ class HMInventoryReportCreator extends IPSModule
                             } else {
                                 $tx_strg = '--';
                             }
-                            $lvl_strg = sprintf(
-                                $fmt_strg,
-                                $lvl_strg_color,
-                                $rx_strg,
-                                $tx_strg
-                            );
+                            if (($HM_dev['HM_Roaming'] === '+') || $lciValue[2]) {
+                                $lvl_strg = sprintf(
+                                    '%s<ins>%s &#047 %s</ins></font>',
+                                    $lvl_strg_color,
+                                    $rx_strg,
+                                    $tx_strg
+                                );
+                            } else {
+                                $lvl_strg = sprintf(
+                                    '%s%s &#047 %s</font>',
+                                    $lvl_strg_color,
+                                    $rx_strg,
+                                    $tx_strg
+                                );
+                            }
 
                             $HTML_dvcs .= $dtdvc_td_ac_b . $lvl_strg . $dtdvc_td_e;
                         } else {
@@ -813,6 +786,23 @@ class HMInventoryReportCreator extends IPSModule
         }
     }
 
+ private function SendRequestMessage(string $methodName, array $params, string $BidCos_Service_adr, $UseSSL, string $Password, string $Username)
+    {
+     $xml_BidCos_client = new xmlrpc_client($BidCos_Service_adr);
+     if ($UseSSL) {
+         $xml_BidCos_client->setSSLVerifyHost(0);
+         $xml_BidCos_client->setSSLVerifyPeer(false);
+     }
+     if ($Password !== '') {
+         $xml_BidCos_client->setCredentials($Username, $Password);
+     }
+
+     $xml_reqmsg = new xmlrpcmsg($methodName, $params);
+
+     $this->SendDebug('send (xmlrpc)', sprintf('send (xmlrpc):%s:%s', $BidCos_Service_adr, $methodName), 0);
+     return $xml_BidCos_client->send($xml_reqmsg);
+
+ }
     private static function usort_HM_address(array $a, array $b)
     {
         $result = strcasecmp($a['HM_address'], $b['HM_address']);
