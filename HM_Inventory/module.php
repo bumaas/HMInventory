@@ -18,8 +18,6 @@ class HMInventoryReportCreator extends IPSModule
     private const BG_COLOR_ODDLINE        = '#181818';         // Background color for the odd lines of the device list
     private const BG_COLOR_EVENLINE       = '#1A2B3C';         // Background color for the even lines of the device list
 
-    private const VERSION = '1.9.5';
-
     private const PROP_OUTPUTFILE = 'OutputFile';
 
     //property names
@@ -91,12 +89,12 @@ class HMInventoryReportCreator extends IPSModule
         $ParentId = @IPS_GetInstance($this->InstanceID)['ConnectionID'];
         $this->SendDebug('Parent', sprintf('%s (#%s)', IPS_GetName($ParentId), $ParentId), 0);
         if ($ParentId === 0) {
-            echo sprintf ('Gateway is not configured!' . PHP_EOL . PHP_EOL);
+            echo sprintf('Gateway is not configured!' . PHP_EOL . PHP_EOL);
             return false;
         }
 
-        if ($this->GetStatus() !== IS_ACTIVE){
-            echo sprintf ('Instance is not active!' . PHP_EOL . PHP_EOL);
+        if ($this->GetStatus() !== IS_ACTIVE) {
+            echo sprintf('Instance is not active!' . PHP_EOL . PHP_EOL);
             return false;
         }
 
@@ -114,10 +112,18 @@ class HMInventoryReportCreator extends IPSModule
             $BidCos_IP_Service_adr    = sprintf('http://%s:%s', $IP_adr_Homematic, $ParentConfig['IPPort']);
         }
 
-        $hm_RF_dev_list    = [];
-        $hm_IP_dev_list    = [];
-        $hm_Wired_dev_list = [];
-        $err               = 0;
+        $filename      = __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . 'library.json';
+        $library       = json_decode(file_get_contents($filename), true);
+        $moduleVersion = sprintf('%s.%s (%s)', $library['version'], $library['build'], date('Ymd', $library['date']));
+
+
+        $hm_RF_dev_list                = [];
+        $hm_RF_parent_devices_count    = 0;
+        $hm_IP_dev_list                = [];
+        $hm_IP_parent_devices_count    = 0;
+        $hm_Wired_dev_list             = [];
+        $hm_Wired_parent_devices_count = 0;
+        $err                           = 0;
 
         //print_r($this->LoadHMScript($IP_adr_Homematic, $BidCos_RF_Service_adr, 'listDevices'))
         $xml_reqmsg = new xmlrpcmsg('listDevices');
@@ -136,9 +142,16 @@ class HMInventoryReportCreator extends IPSModule
         if ($xml_rtnmsg->errno === 0) {
             $this->SendDebug('received (xmlrpc):', json_encode($xml_rtnmsg->value()), 0);
             $hm_RF_dev_list = php_xmlrpc_decode($xml_rtnmsg->value());
+            foreach ($hm_RF_dev_list as $device) {
+                if (($device['PARENT'] === '') && ($device['ADDRESS'] !== 'BidCoS-RF')) {
+                    //echo sprintf('%s'.PHP_EOL, $device['ADDRESS']);
+                    $hm_RF_parent_devices_count++;
+                }
+                //echo $device
+            }
             //print_r($hm_RF_dev_list);
         } else {
-            $this->SendDebug('Error', "Can't get any device information from the BidCos-RF-Service", 0);
+            $this->SendDebug('Error', "Can't get any device information from the BidCoS-RF-Service", 0);
             $err++;
         }
 
@@ -157,6 +170,12 @@ class HMInventoryReportCreator extends IPSModule
         if ($xml_rtnmsg->errno === 0) {
             $this->SendDebug('received (xmlrpc):', json_encode($xml_rtnmsg->value()), 0);
             $hm_IP_dev_list = php_xmlrpc_decode($xml_rtnmsg->value());
+            foreach ($hm_IP_dev_list as $device) {
+                if ($device['PARENT'] === '') {
+                    //echo sprintf('%s' . PHP_EOL, $device['ADDRESS']);
+                    $hm_IP_parent_devices_count++;
+                }
+            }
             //print_r($hm_IP_dev_list);
         } else {
             $this->SendDebug('Error', "Can't get any device information from the BidCos-IP-Service", 0);
@@ -178,6 +197,12 @@ class HMInventoryReportCreator extends IPSModule
         if ($xml_rtnmsg->errno === 0) {
             $this->SendDebug('received (xmlrpc):', json_encode($xml_rtnmsg->value()), 0);
             $hm_Wired_dev_list = php_xmlrpc_decode($xml_rtnmsg->value());
+            foreach ($hm_Wired_dev_list as $device) {
+                if (($device['PARENT'] === '') && ($device['ADDRESS'] !== 'BidCoS-Wir')) {
+                    //echo sprintf('%s' . PHP_EOL, $device['ADDRESS']);
+                    $hm_Wired_parent_devices_count++;
+                }
+            }
             //print_r($hm_Wired_dev_list);
         } else {
             $this->SendDebug('Error', "Can't get any device information from the BidCos-Wired-Service", 0);
@@ -191,7 +216,7 @@ class HMInventoryReportCreator extends IPSModule
         }
         //print_r($hm_dev_list);
 
-        // get all Bicos Interfaces
+        // get all BidCos Interfaces
         $xml_reqmsg = new xmlrpcmsg('listBidcosInterfaces');
         $this->SendDebug('send (xmlrpc):', $BidCos_RF_Service_adr . ':listBidcosInterfaces', 0);
         $xml_rtnmsg = $xml_BidCos_RF_client->send($xml_reqmsg);
@@ -218,8 +243,8 @@ class HMInventoryReportCreator extends IPSModule
             }
         }
 
-        $IPS_device_num     = 0;
-        $IPS_HM_channel_num = 0;
+        $IPS_device_num     = 0; //Anzahl der IPS Instanzen
+        $IPS_HM_channel_num = 0; //Anzahl der verbundenen HM Kanälen (berücksichtigt Mehrfacheinbindungen)
         $HM_module_num      = 0;
         $HM_array           = [];
 
@@ -560,12 +585,17 @@ class HMInventoryReportCreator extends IPSModule
 
         //$HTML_ifcs = "<tr valign='top' width='100%'>";
         $HTML_ifcs = "<tr valign='top'>";
-        $HTML_ifcs .= "<td><table align='left'><tr><td><font size='3' color='#99AABB'><b>HM Inventory (" . self::VERSION . ') </font></b>';
+        $HTML_ifcs .= "<td><table align='left'><tr><td><font size='3' color='#99AABB'><b>HM Inventory (" . $moduleVersion . ') </font></b>';
         $HTML_ifcs .= "<font size='3' color='#CCCCCC'><b>&nbsp found at " . strftime('%d.%m.%Y %X', time()) . '</font></b></td></tr>';
-        $HTML_ifcs .= "<tr><td><font size='2' color='#CCCCCC'>" . $HM_interface_num . ' HomeMatic interfaces (' . $HM_interface_connected_num
-                      . ' connected)</td>';
-        $HTML_ifcs .= "<tr><td><font size='2' color='#CCCCCC'>" . $IPS_device_num . ' IPS instances (connected to ' . $IPS_HM_channel_num
-                      . ' HM channels)</td>';
+        $HTML_ifcs .= "<tr><td><font size='2' color='#CCCCCC'>" . sprintf(
+                '%s HomeMatic interfaces (%s connected) with %s HM-RF devices, %s HM-wired devices and %s HmIP devices',
+                $HM_interface_num,
+                $HM_interface_connected_num,
+                $hm_RF_parent_devices_count,
+                $hm_Wired_parent_devices_count,
+                $hm_IP_parent_devices_count
+            ) . '</td>';
+        $HTML_ifcs .= "<tr><td><font size='2' color='#CCCCCC'>" . sprintf ('%s IPS instances (connected to %s HM channels)', $IPS_device_num, $IPS_HM_channel_num) . '</td>';
         $HTML_ifcs .= '</table></td>';
         $HTML_ifcs .= "<td valign='top'>&nbsp;</td>";
 
@@ -728,8 +758,8 @@ class HMInventoryReportCreator extends IPSModule
         $OutputFileName = $this->ReadPropertyString(self::PROP_OUTPUTFILE);
         if ($OutputFileName) {
             $HTML_file = @fopen($OutputFileName, 'wb');
-            if ($HTML_file === false){
-                echo sprintf ('File "%s" not writable!' . PHP_EOL . PHP_EOL, $OutputFileName);
+            if ($HTML_file === false) {
+                echo sprintf('File "%s" not writable!' . PHP_EOL . PHP_EOL, $OutputFileName);
                 return false;
             }
             fwrite($HTML_file, '<html><head><style type="text/css">');
