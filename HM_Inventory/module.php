@@ -32,15 +32,19 @@ class HMInventoryReportCreator extends IPSModule
         $this->RegisterProperties();
 
         $this->RegisterTimer('Update', 0, 'HMI_CreateReport(' . $this->InstanceID . ');');
+
+        //we will wait until the kernel is ready
+        $this->RegisterMessage(0, IPS_KERNELMESSAGE);
+
     }
 
     public function ApplyChanges()
     {
-        //we will wait until the kernel is ready
-        $this->RegisterMessage(0, IPS_KERNELMESSAGE);
-
         //Never delete this line!
         parent::ApplyChanges();
+
+        //Set receive filter to something that will never match
+        $this->SetReceiveDataFilter('(?!x)x'); //es werden keine Nachrichten vom verbundenen Socket verarbeitet
 
         if (IPS_GetKernelRunlevel() !== KR_READY) {
             return;
@@ -59,11 +63,16 @@ class HMInventoryReportCreator extends IPSModule
     {
         parent::MessageSink($TimeStamp, $SenderID, $Message, $Data);
 
-        if ($Message === IPS_KERNELMESSAGE) {
-            if ($Data[0] === KR_READY) {
-                $this->ApplyChanges();
-            }
+        if (($Message === IPS_KERNELMESSAGE) && ($Data[0] === KR_READY)) {
+            $this->ApplyChanges();
         }
+    }
+
+    public function ReceiveData($JSONString)
+    {
+        trigger_error(sprintf ('Fatal error: no ReceiveData expected. (%s)', $JSONString));
+
+        return parent::ReceiveData($JSONString);
     }
 
 
@@ -826,7 +835,6 @@ class HMInventoryReportCreator extends IPSModule
         return $result;
     }
 
-    /** @noinspection PhpUnusedPrivateMethodInspection */
     private static function usort_HM_device_adr(array $a, array $b)
     {
         if (($result = strcasecmp($a['HM_device'], $b['HM_device'])) === 0) {
@@ -836,7 +844,6 @@ class HMInventoryReportCreator extends IPSModule
         return $result;
     }
 
-    /** @noinspection PhpUnusedPrivateMethodInspection */
     private static function usort_HM_devtype(array $a, array $b)
     {
         if (($result = strcasecmp($a['HM_devtype'], $b['HM_devtype'])) === 0) {
@@ -846,7 +853,6 @@ class HMInventoryReportCreator extends IPSModule
         return $result;
     }
 
-    /** @noinspection PhpUnusedPrivateMethodInspection */
     private static function usort_HM_devname(array $a, array $b)
     {
         if (($result = strcasecmp($a['HM_devname'], $b['HM_devname'])) === 0) {
