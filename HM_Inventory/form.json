@@ -1,45 +1,47 @@
 {
-  "elements":
-  [
-    { "type": "Label", "caption": "This Instance creates a Report with all Homematic Devices."},
-    { "type": "Label", "caption": "The Report is created as HTML file if a file name is given"},
-    { "type": "ValidationTextBox", "name": "OutputFile", "caption": "Output File"},
-
-    { "type": "Label", "caption": "Select the order how the device list should be sorted"},
-    { "type": "Select", "name": "SortOrder", "caption": "Sort Order",
+  "elements": [
+    {"type": "Label", "caption": "This Instance creates a Report with all Homematic Devices."},
+    {"type": "Label", "caption": "The Report is created as HTML file if a file name is given"},
+    {"type": "ValidationTextBox", "name": "OutputFile", "caption": "Output File"},
+    {"type": "Label", "caption": "Select the order how the device list should be sorted"},
+    {
+      "type":    "Select", "name": "SortOrder", "caption": "Sort Order",
       "options": [
-        { "caption": "HM address", "value": 0 },
-        { "caption": "HM device type", "value": 1 },
-        { "caption": "HM channel type", "value": 2 },
-        { "caption": "HM device name", "value": 4 },
-        { "caption": "IPS device name", "value": 3 }
+        {"caption": "HM address", "value": 0},
+        {"caption": "HM device type", "value": 1},
+        {"caption": "HM channel type", "value": 2},
+        {"caption": "HM device name", "value": 4},
+        {"caption": "IPS device name", "value": 3}
       ]
     },
-
-    { "type": "Label", "caption": "If the complete path of the IPS instance should be shown"},
-    { "type": "CheckBox", "name": "ShowLongIPSDeviceNames", "caption": "Show long IPS Device Names" },
-
-    { "type": "Label", "caption": "If somebody is interested in the device names used in HM configurator (only device names which have been set once are shown). This parameter takes some performance."},
-    { "type": "CheckBox", "name": "ShowHMConfiguratorDeviceNames", "caption": "Show HM Configurator Device Names" },
-
-    { "type": "Label", "caption": "If somebody is interested in Maintenance HM-Entries"},
-    { "type": "CheckBox", "name": "ShowMaintenanceEntries", "caption": "Show Maintenance Channel" },
-
-    { "type": "Label", "caption": "If somebody is interested in Channels which are not used in IP-Symcon"},
-    { "type": "CheckBox", "name": "ShowNotUsedChannels", "caption": "Show Channels which are not used" },
-
-    { "type": "Label", "caption": "If somebody is interested in Virtual-Key HM-Entries"},
-    { "type": "CheckBox", "name": "ShowVirtualKeyEntries", "caption": "Show Virtual Key Entries" },
-
-    { "type": "Label", "caption": "If the device list should be saved json encoded in a string variable"},
-    { "type": "CheckBox", "name": "SaveDeviceListInVariable", "caption": "Save Device List in Variable" },
-
-    { "type": "Label", "caption": "If the report should be created automatically select an update interval"},
-    { "type": "NumberSpinner", "name": "UpdateInterval", "caption": "Update Interval", "suffix": "Minutes" }
+    {"type": "Label", "caption": "If the complete path of the IPS instance should be shown"},
+    {"type": "CheckBox", "name": "ShowLongIPSDeviceNames", "caption": "Show long IPS Device Names"},
+    {"type": "Label", "caption": "If somebody is interested in the device names used in HM configurator (only device names which have been set once are shown). This parameter takes some performance."},
+    {"type": "CheckBox", "name": "ShowHMConfiguratorDeviceNames", "caption": "Show HM Configurator Device Names"},
+    {"type": "Label", "caption": "If somebody is interested in Maintenance HM-Entries"},
+    {"type": "CheckBox", "name": "ShowMaintenanceEntries", "caption": "Show Maintenance Channel"},
+    {"type": "Label", "caption": "If somebody is interested in Channels which are not used in IP-Symcon"},
+    {"type": "CheckBox", "name": "ShowNotUsedChannels", "caption": "Show Channels which are not used"},
+    {"type": "Label", "caption": "If somebody is interested in Virtual-Key HM-Entries"},
+    {"type": "CheckBox", "name": "ShowVirtualKeyEntries", "caption": "Show Virtual Key Entries"},
+    {"type": "Label", "caption": "If the device list should be saved json encoded in a string variable"},
+    {"type": "CheckBox", "name": "SaveDeviceListInVariable", "caption": "Save Device List in Variable"},
+    {"type": "Label", "caption": "If the report should be created automatically select an update interval"},
+    {"type": "NumberSpinner", "name": "UpdateInterval", "caption": "Update Interval", "suffix": "Minutes"}
   ],
-  "status": [],
-  "actions":
-  [
-    { "type": "Button", "caption": "Create Report", "onClick": "$module = new IPSModule($id); if (HMI_CreateReport($id)){echo $module->Translate('Finished!');} else {echo $module->Translate('Error!');}"}
+  "status":   [],
+  "actions":  [
+    {
+      "type":  "RowLayout",
+      "items": [
+        {"type": "Button", "caption": "Create Report", "onClick": "$module = new IPSModule($id); if (HMI_CreateReport($id)){echo $module->Translate('Finished!');} else {echo $module->Translate('Error!');}"},
+        {
+          "type":    "ProgressBar",
+          "name":    "ProgressBar",
+          "width":   "200px",
+          "visible": false
+        }
+      ]
+    }
   ]
 }

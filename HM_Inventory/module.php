@@ -18,9 +18,10 @@ class HMInventoryReportCreator extends IPSModule
     private const BG_COLOR_ODDLINE        = '#181818';         // Background color for the odd lines of the device list
     private const BG_COLOR_EVENLINE       = '#1A2B3C';         // Background color for the even lines of the device list
 
-    private const PROP_OUTPUTFILE = 'OutputFile';
-
     //property names
+    private const PROP_OUTPUTFILE = 'OutputFile';
+    private const PROP_SHOWMAINTENANCEENTRIES = 'ShowMaintenanceEntries';
+    private const PROP_SHOWVIRTUALKEYENTRIES = 'ShowVirtualKeyEntries';
     private const PROP_SAVEDEVICELISTINVARIABLE = 'SaveDeviceListInVariable';
 
     // Überschreibt die interne IPS_Create($id) Funktion
@@ -102,7 +103,7 @@ class HMInventoryReportCreator extends IPSModule
             return false;
         }
 
-        if ($this->GetStatus() !== IS_ACTIVE) {
+        if (($this->GetStatus() !== IS_ACTIVE) || !$this->HasActiveParent()) {
             echo sprintf('Instance is not active!' . PHP_EOL . PHP_EOL);
             return false;
         }
@@ -191,11 +192,18 @@ class HMInventoryReportCreator extends IPSModule
         // merge all devices
         $hm_dev_list = array_merge($hm_RF_dev_list, $hm_IP_dev_list, $hm_Wired_dev_list);
         if (count($hm_dev_list) === 0) {
-            trigger_error("Fatal error: Can't get any device information from the BidCos-Services (Error: $err)");
+            trigger_error("Can't get any device information from the BidCos-Services (Error: $err)", E_USER_ERROR);
         }
         //print_r($hm_dev_list);
 
+        $progressBarCounter = 0;
+        $this->UpdateFormField('ProgressBar', 'maximum', 9);
+        $this->UpdateFormField('ProgressBar', 'visible', true);
+
+
         // get all BidCos Interfaces
+        $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter++);
+
         $xml_rtnmsg = $this->SendRequestMessage('listBidcosInterfaces', [], $BidCos_RF_Service_adr, $ParentConfig['UseSSL'], $ParentConfig['Password'], $ParentConfig['Username']);
 
         if ($xml_rtnmsg->errno === 0) {
@@ -231,6 +239,8 @@ class HMInventoryReportCreator extends IPSModule
 
         // Fill array with all HM-devices found in IP-Symcon
         //
+        $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter++);
+
         foreach (IPS_GetInstanceListByModuleID('{EE4A81C6-5C90-4DB7-AD2F-F6BBD521412E}') as $id) {
             //first check if the device is assigned to the right gateway
             if ($ParentId !== IPS_GetInstance($id)['ConnectionID']) {
@@ -342,6 +352,8 @@ class HMInventoryReportCreator extends IPSModule
 
         // Add HM_devices known by BidCos but not present in IP-Symcon
         //
+        $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter++);
+
         if ($this->ReadPropertyBoolean('ShowNotUsedChannels')) {
             foreach ($hm_dev_list as $hm_dev) {
                 $HM_address      = $hm_dev['ADDRESS'];
@@ -354,10 +366,10 @@ class HMInventoryReportCreator extends IPSModule
                 }
 
                 if (($hm_dev_in_array === false) && isset($hm_dev['PARENT']) && ($hm_dev['PARENT'] !== '')) {
-                    if ($hm_dev['TYPE'] === 'VIRTUAL_KEY' && !$this->ReadPropertyBoolean('ShowVirtualKeyEntries')) {
+                    if ($hm_dev['TYPE'] === 'VIRTUAL_KEY' && !$this->ReadPropertyBoolean(self::PROP_SHOWVIRTUALKEYENTRIES)) {
                         continue;
                     }
-                    if ($hm_dev['TYPE'] === 'MAINTENANCE' && !$this->ReadPropertyBoolean('ShowMaintenanceEntries')) {
+                    if ($hm_dev['TYPE'] === 'MAINTENANCE' && !$this->ReadPropertyBoolean(self::PROP_SHOWMAINTENANCEENTRIES)) {
                         continue;
                     }
                     $hm_chld_dev    = $hm_dev;
@@ -438,6 +450,8 @@ class HMInventoryReportCreator extends IPSModule
 
         // Request tx/rx RF-levels from BidCos-RF-Service
         //
+        $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter++);
+
         $xml_rtnmsg = $this->SendRequestMessage('rssiInfo', [], $BidCos_RF_Service_adr, $ParentConfig['UseSSL'], $ParentConfig['Password'], $ParentConfig['Username']);
 
         $hm_lvl_list = [];
@@ -450,6 +464,8 @@ class HMInventoryReportCreator extends IPSModule
 
         // Add tx/rx RF-levels for each device/interface
         //
+        $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter++);
+
         if (is_array($hm_lvl_list)) {
             foreach ($HM_array as &$HM_dev) {
                 $hm_adr = explode(':', $HM_dev['HM_address']);
@@ -495,6 +511,8 @@ class HMInventoryReportCreator extends IPSModule
 
         // Request tx/rx RF-levels from BidCos-IP-Service
         //
+        $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter++);
+
         usort($HM_array, 'self::usort_HM_address');
 
         $previous_hm_adr    = '';
@@ -528,6 +546,20 @@ class HMInventoryReportCreator extends IPSModule
         }
         unset($HM_dev);
 
+
+        //delete the Maintenance Channels and Virtual Keys if required
+        foreach ($HM_array as $key=> $HM_dev){
+            if ($HM_dev['HM_devtype'] === 'MAINTENANCE' && !$this->ReadPropertyBoolean(self::PROP_SHOWMAINTENANCEENTRIES)){
+                unset ($HM_array[$key]);
+            }
+
+            if ($HM_dev['HM_devtype'] === 'VIRTUAL_KEY' && !$this->ReadPropertyBoolean(self::PROP_SHOWVIRTUALKEYENTRIES)){
+                unset ($HM_array[$key]);
+            }
+        }
+
+
+
         // Sort device list
         //
         $SortOrder = $this->ReadPropertyInteger('SortOrder');
@@ -559,6 +591,8 @@ class HMInventoryReportCreator extends IPSModule
         }
 
         // Generate HTML output code
+
+        $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter++);
 
         $HTML_intro = "<table width='100%' border='0' align='center' bgcolor=" . self::BG_COLOR_GLOBAL . '>';
 
@@ -736,6 +770,8 @@ class HMInventoryReportCreator extends IPSModule
 
         $HTML_end = '</table>';
 
+        $this->UpdateFormField('ProgressBar', 'visible', false);
+
         // Output the results
 
         $OutputFileName = $this->ReadPropertyString(self::PROP_OUTPUTFILE);
@@ -771,8 +807,8 @@ class HMInventoryReportCreator extends IPSModule
         $this->RegisterPropertyBoolean('SaveHMArrayInVariable', false);
         $this->RegisterPropertyString(self::PROP_OUTPUTFILE, IPS_GetKernelDir() . 'HM_inventory.html');
         $this->RegisterPropertyInteger('SortOrder', 0);
-        $this->RegisterPropertyBoolean('ShowVirtualKeyEntries', false);
-        $this->RegisterPropertyBoolean('ShowMaintenanceEntries', true);
+        $this->RegisterPropertyBoolean(self::PROP_SHOWVIRTUALKEYENTRIES, false);
+        $this->RegisterPropertyBoolean(self::PROP_SHOWMAINTENANCEENTRIES, true);
         $this->RegisterPropertyBoolean('ShowNotUsedChannels', true);
         $this->RegisterPropertyBoolean('ShowLongIPSDeviceNames', false);
         $this->RegisterPropertyBoolean('ShowHMConfiguratorDeviceNames', true);
@@ -808,7 +844,7 @@ class HMInventoryReportCreator extends IPSModule
 
      $xml_reqmsg = new xmlrpcmsg($methodName, $params);
 
-     $this->SendDebug('send (xmlrpc)', sprintf('send (xmlrpc):%s:%s', $BidCos_Service_adr, $methodName), 0);
+     $this->SendDebug('send (xmlrpc)', sprintf('send (xmlrpc):%s:%s, params: %s', $BidCos_Service_adr, $methodName, json_encode($params)), 0);
      return $xml_BidCos_client->send($xml_reqmsg);
 
  }
@@ -865,7 +901,10 @@ class HMInventoryReportCreator extends IPSModule
     private function GetHMChannelName($HMAddress, $HMDeviceAddress)
     {
         $HMScript = 'Name = (xmlrpc.GetObjectByHSSAddress(interfaces.GetAt(0), "' . $HMDeviceAddress . '")).Name();' . PHP_EOL;
-        return json_decode($this->SendScript($HMAddress, $HMScript), true)['Name'];
+
+        $HMChannelName = json_decode($this->SendScript($HMAddress, $HMScript), true)['Name'];
+        $this->SendDebug(__FUNCTION__, sprintf('HMAddress: %s, HMDeviceAddress: %s -> %s', $HMAddress, $HMDeviceAddress, $HMChannelName), 0);
+        return $HMChannelName;
     }
 
     private function SendScript($HMAddress, $Script)
@@ -895,8 +934,6 @@ class HMInventoryReportCreator extends IPSModule
             $header[] = 'Accept-Charset: UTF-8';
             $header[] = 'Content-type: text/plain;charset="UTF-8"';
 
-            $this->SendDebug('send (curl):', $HMScript, 0);
-
             $ParentId     = @IPS_GetInstance($this->InstanceID)['ConnectionID'];
             $ParentConfig = json_decode(IPS_GetConfiguration($ParentId), true);
 
@@ -924,16 +961,12 @@ class HMInventoryReportCreator extends IPSModule
             }
 
             $result = curl_exec($ch);
-            $this->SendDebug('received (curl):', $result, 0);
-
             $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
             curl_close($ch);
-            if ($http_code >= 400) {
-                trigger_error('CCU unreachable:' . $http_code);
-            }
-            if ($result === false) {
-                trigger_error('CCU unreachable');
+
+            if (($result === false) || ($http_code >= 400)) {
+                trigger_error('CCU unreachable', E_USER_ERROR);
             }
             return $result;
         }
