@@ -270,7 +270,7 @@ class HMInventoryReportCreator extends IPSModule
             $hm_chld_dev   = null;
             $hm_par_dev    = null;
 
-            set_time_limit(60); //Abfragen dauern manchmal länger als 30 Sekunden
+            if ((float) IPS_GetKernelVersion() < 5.6) set_time_limit(60); //Abfragen dauern manchmal länger als 30 Sekunden
 
             foreach ($hm_dev_list as $hm_dev) {
                 if ($hm_dev['ADDRESS'] === $HM_address) {
