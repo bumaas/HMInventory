@@ -140,8 +140,8 @@ class HMInventoryReportCreator extends IPSModule
         // get the RF devices
         $xml_rtnmsg = $this->SendRequestMessage('listDevices', [], $BidCos_RF_Service_adr, $ParentConfig['UseSSL'], $ParentConfig['Password'], $ParentConfig['Username']);
         if ($xml_rtnmsg->errno === 0) {
-            $this->SendDebug('received (xmlrpc):', json_encode($xml_rtnmsg->value()), 0);
             $hm_RF_dev_list = php_xmlrpc_decode($xml_rtnmsg->value());
+            $this->SendDebug('received (RF_dev_list):', json_encode($hm_RF_dev_list), 0);
             foreach ($hm_RF_dev_list as $device) {
                 if (($device['PARENT'] === '') && ($device['ADDRESS'] !== 'BidCoS-RF')) {
                     //echo sprintf('%s'.PHP_EOL, $device['ADDRESS']);
@@ -158,13 +158,8 @@ class HMInventoryReportCreator extends IPSModule
         // get the IP devices
         $xml_rtnmsg = $this->SendRequestMessage('listDevices', [], $BidCos_IP_Service_adr, $ParentConfig['UseSSL'], $ParentConfig['Password'], $ParentConfig['Username']);
         if ($xml_rtnmsg->errno === 0) {
-/*            $json_xml_rtnmsg = json_encode($xml_rtnmsg->value());
-            $chunks = str_split($json_xml_rtnmsg, 5000);
-            foreach ($chunks as $chunk){
-                $this->SendDebug('received (xmlrpc):', $chunk, 0);
-            }
-*/
             $hm_IP_dev_list = php_xmlrpc_decode($xml_rtnmsg->value());
+            $this->SendDebug('received (IP_dev_list):', json_encode($hm_IP_dev_list), 0);
             foreach ($hm_IP_dev_list as $device) {
                 if ($device['PARENT'] === '') {
                     //echo sprintf('%s' . PHP_EOL, $device['ADDRESS']);
@@ -180,8 +175,8 @@ class HMInventoryReportCreator extends IPSModule
         // get the Wired devices
         $xml_rtnmsg = $this->SendRequestMessage('listDevices', [], $BidCos_Wired_Service_adr, $ParentConfig['UseSSL'], $ParentConfig['Password'], $ParentConfig['Username']);
         if ($xml_rtnmsg->errno === 0) {
-            $this->SendDebug('received (xmlrpc):', json_encode($xml_rtnmsg->value()), 0);
             $hm_Wired_dev_list = php_xmlrpc_decode($xml_rtnmsg->value());
+            $this->SendDebug('received (Wired_dev_list):', json_encode($hm_Wired_dev_list), 0);
             foreach ($hm_Wired_dev_list as $device) {
                 if (($device['PARENT'] === '') && ($device['ADDRESS'] !== 'BidCoS-Wir')) {
                     //echo sprintf('%s' . PHP_EOL, $device['ADDRESS']);
@@ -212,8 +207,8 @@ class HMInventoryReportCreator extends IPSModule
         $xml_rtnmsg = $this->SendRequestMessage('listBidcosInterfaces', [], $BidCos_RF_Service_adr, $ParentConfig['UseSSL'], $ParentConfig['Password'], $ParentConfig['Username']);
 
         if ($xml_rtnmsg->errno === 0) {
-            $this->SendDebug('received (xmlrpc):', json_encode($xml_rtnmsg->value()), 0);
             $hm_BidCos_Ifc_list = php_xmlrpc_decode($xml_rtnmsg->value());
+            $this->SendDebug('received (BidCos_Ifc_list):', json_encode($hm_BidCos_Ifc_list), 0);
             //nach 'DEFAULT' sortieren, damit die CCU an erster Stelle steht.
             $default = array_column($hm_BidCos_Ifc_list, 'DEFAULT');
             array_multisort($default, SORT_DESC, $hm_BidCos_Ifc_list);
