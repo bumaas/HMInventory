@@ -45,7 +45,7 @@ class HMInventoryReportCreator extends IPSModule
         parent::ApplyChanges();
 
         //Set receive filter to something that will never match
-        $this->SetReceiveDataFilter('(?!x)x'); //es werden keine Nachrichten vom verbundenen Socket verarbeitet
+        $this->SetReceiveDataFilter('Dieser Filter sollte niemals greifen, daher ist er etwas länger :-'); //es werden keine Nachrichten vom verbundenen Socket verarbeitet
 
         if (IPS_GetKernelRunlevel() !== KR_READY) {
             return;
@@ -99,18 +99,18 @@ class HMInventoryReportCreator extends IPSModule
         $ParentId = @IPS_GetInstance($this->InstanceID)['ConnectionID'];
         $this->SendDebug('Parent', sprintf('%s (#%s)', IPS_GetName($ParentId), $ParentId), 0);
         if ($ParentId === 0) {
-            echo sprintf('Gateway is not configured!' . PHP_EOL . PHP_EOL);
+            echo 'Gateway is not configured!' . PHP_EOL . PHP_EOL;
             return false;
         }
 
         if (($this->GetStatus() !== IS_ACTIVE) || !$this->HasActiveParent()) {
-            echo sprintf('Instance is not active!' . PHP_EOL . PHP_EOL);
+            echo 'Instance is not active!' . PHP_EOL . PHP_EOL;
             return false;
         }
 
         $ParentConfig = json_decode(IPS_GetConfiguration($ParentId), true);
 
-        $IP_adr_Homematic = (string)IPS_GetProperty($ParentId, 'Host');
+        $IP_adr_Homematic = IPS_GetProperty($ParentId, 'Host');
 
         if ($ParentConfig['UseSSL']) {
             $BidCos_Wired_Service_adr = sprintf('https://%s:%s', $IP_adr_Homematic, $ParentConfig['WRSSLPort']);
@@ -270,7 +270,9 @@ class HMInventoryReportCreator extends IPSModule
             $hm_chld_dev   = null;
             $hm_par_dev    = null;
 
-            if ((float) IPS_GetKernelVersion() < 5.6) set_time_limit(60); //Abfragen dauern manchmal länger als 30 Sekunden
+            if ((float) IPS_GetKernelVersion() < 5.6) {
+                set_time_limit(60); //Abfragen dauern manchmal länger als 30 Sekunden
+            }
 
             foreach ($hm_dev_list as $hm_dev) {
                 if ($hm_dev['ADDRESS'] === $HM_address) {
@@ -432,21 +434,6 @@ class HMInventoryReportCreator extends IPSModule
                 }
             }
         }
-        // Force communication for RF-level update if requested
-        //
-        /*
-        if ($this->ReadPropertyBoolean('RequestStatusForLevelUpdate')) {
-            foreach ($HM_array as &$HM_dev) {
-                if (substr($HM_dev['HM_address'], strpos($HM_dev['HM_address'], ':'), 2) == ':1') {
-                    $xml_method = new xmlrpcmsg('getParamset', [new xmlrpcval($HM_dev['HM_address'], 'string'), new xmlrpcval('VALUES', 'string')]);
-                    $xml_rtnmsg = $xml_BidCos_RF_client->send($xml_method);
-                    if ($xml_rtnmsg->errno == 0) {
-                        $HM_ParamSet = php_xmlrpc_decode($xml_rtnmsg->value());
-                    }
-                }
-            }
-        }
-        */
 
         // Request tx/rx RF-levels from BidCos-RF-Service
         //
@@ -596,11 +583,10 @@ class HMInventoryReportCreator extends IPSModule
 
         $HTML_intro = "<table width='100%' border='0' align='center' bgcolor=" . self::BG_COLOR_GLOBAL . '>';
 
-        //$HTML_ifcs = "<tr valign='top' width='100%'>";
-        $HTML_ifcs = "<tr valign='top'>";
-        $HTML_ifcs .= "<td><table align='left'><tr><td><font size='3' color='#99AABB'><b>HM Inventory (" . $moduleVersion . ') </font></b>';
-        $HTML_ifcs .= "<font size='3' color='#CCCCCC'><b>&nbsp found at " . strftime('%d.%m.%Y %X', time()) . '</font></b></td></tr>';
-        $HTML_ifcs .= "<tr><td><font size='2' color='#CCCCCC'>" . sprintf(
+        $HTML_ifcs = "<tr style='vertical-align: top'>";
+        $HTML_ifcs .= "<td><table style='text-align: left;font-size: large; color: #99AABB'><tr><td><b>HM Inventory ($moduleVersion) </b>";
+        $HTML_ifcs .= "<b>&nbsp found at " . strftime('%d.%m.%Y %X', time()) . '</b></td></tr>';
+        $HTML_ifcs .= "<tr><td style='font-size: small; color: #CCCCCC'>" . sprintf(
                 '%s HomeMatic interfaces (%s connected) with %s HM-RF devices, %s HM-wired devices and %s HmIP devices',
                 $HM_interface_num,
                 $HM_interface_connected_num,
@@ -608,15 +594,15 @@ class HMInventoryReportCreator extends IPSModule
                 $hm_Wired_parent_devices_count,
                 $hm_IP_parent_devices_count
             ) . '</td>';
-        $HTML_ifcs .= "<tr><td><font size='2' color='#CCCCCC'>" . sprintf ('%s IPS instances (connected to %s HM channels)', $IPS_device_num, $IPS_HM_channel_num) . '</td>';
+        $HTML_ifcs .= "<tr><td style='font-size: small; color: #CCCCCC'>" . sprintf ('%s IPS instances (connected to %s HM channels)', $IPS_device_num, $IPS_HM_channel_num) . '</td>';
         $HTML_ifcs .= '</table></td>';
-        $HTML_ifcs .= "<td valign='top'>&nbsp;</td>";
+        $HTML_ifcs .= "<td style='vertical-align: top'>&nbsp;</td>";
 
-        $HTML_ifcs .= "<td width='40%' valign='bottom'><table width='100%' align='right' bgcolor=" . self::BG_COLOR_INTERFACE_LIST . '>';
+        $HTML_ifcs .= "<td style='width: 40%; vertical-align: bottom;'><table style='width: 100%; text-align: right; background-color: " . self::BG_COLOR_INTERFACE_LIST . '\'>';
         //print_r($hm_BidCos_Ifc_list);
         foreach ($hm_BidCos_Ifc_list as $hm_ifce) {
-            $dtifc_td_b = "<td><font size='2' color='#EEEEEE'>" . ($hm_ifce['DEFAULT'] ? '<i>' : '');
-            $dtifc_td_e = ($hm_ifce['DEFAULT'] ? '</i>' : '') . '</font></td>';
+            $dtifc_td_b = "<td style='font-size: small;color: #EEEEEE'>" . ($hm_ifce['DEFAULT'] ? '<i>' : '');
+            $dtifc_td_e = ($hm_ifce['DEFAULT'] ? '</i>' : '') . '</td>';
             $dsc_strg   = sprintf('%s', $hm_ifce['CONNECTED'] ? 'connected' : 'Not connected');
             $ifce_info = sprintf('%s (Fw: %s, DC: %s%%)', $hm_ifce['ADDRESS'], $hm_ifce['FIRMWARE_VERSION'], $hm_ifce['DUTY_CYCLE']);
             $HTML_ifcs  .= '<tr>' . $dtifc_td_b . 'Interface: ' . $ifce_info . '&nbsp' . $dtifc_td_e;
@@ -624,13 +610,13 @@ class HMInventoryReportCreator extends IPSModule
         }
         $HTML_ifcs .= '</table></td></tr>';
 
-        $HTML_sep = "<tr><td colspan=3><table width='100%' align='left'> <hr><tr><td> </td></tr></table></td></tr>";
+        $HTML_sep = "<tr><td colspan=3><table style='width: 100%; text-align: left'> <hr><tr><td> </td></tr></table></td></tr>";
 
-        $dthdr_td_b   = "<td><font size='2' color='#EEEEEE'><b>";
-        $dthdr_td_b_r = "<td align='right'><font size='2' color='#EEEEEE'><b>";
-        $dthdr_td_e   = '</font></b></td>';
+        $dthdr_td_b   = "<td style='font-size: small; color: #EEEEEE'><b>";
+        $dthdr_td_b_r = "<td style='text-align: right; font-size: small; color: #EEEEEE'><b>";
+        $dthdr_td_e   = '</b></td>';
         $dthdr_td_eb  = $dthdr_td_e . $dthdr_td_b;
-        $HTML_dvcs    = "<tr><td colspan=3><table width='100%' align='left'>";
+        $HTML_dvcs    = "<tr><td colspan=3><table style='width: 100%; text-align: left'>";
         $HTML_dvcs    .= '<tr bgcolor=' . self::BG_COLOR_HEADLINE . '>';
         $HTML_dvcs    .= $dthdr_td_b_r . '&nbsp##&nbsp' . $dthdr_td_eb . 'IPS ID' . $dthdr_td_eb . 'IPS device name&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp'
                          . $dthdr_td_eb . 'HM address' . $dthdr_td_e;
@@ -639,11 +625,11 @@ class HMInventoryReportCreator extends IPSModule
         }
         $HTML_dvcs .= $dthdr_td_b . 'HM device type' . $dthdr_td_eb . 'Fw.' . $dthdr_td_eb . 'HM channel type' . $dthdr_td_eb . 'Dir.' . $dthdr_td_eb
                       . 'AES' . $dthdr_td_e;
-        $HTML_dvcs .= "<td width='2%' align='center'><font size='2' color='#EEEEEE'> Roa- ming" . '</font></td>';
+        $HTML_dvcs .= "<td style='width: 2%; text-align: center; color: #EEEEEE; font-size: medium'>Roa- ming</td>";
         foreach ($hm_BidCos_Ifc_list as $hm_ifce) {
             if ($hm_ifce['CONNECTED']) {
-                $HTML_dvcs .= "<td width='6%' align='center'><font size='2' color='#EEEEEE'>" . $hm_ifce['ADDRESS'] . ' tx/rx&nbsp(db&micro;V)'
-                              . '</font></td>';
+                $HTML_dvcs .= "<td style='width: 6%; text-align: center; color: #EEEEEE; font-size: small'>" . $hm_ifce['ADDRESS'] . ' tx/rx&nbsp(db&micro;V)'
+                              . '</td>';
             }
         }
         $HTML_dvcs .= '</tr>';
@@ -660,8 +646,8 @@ class HMInventoryReportCreator extends IPSModule
             }
             $font_tag      = "<font size='2' color=" . (($HM_dev['IPS_HM_d_assgnd'] === false) ? '#DDDDDD' : '#FFAAAA') . '>';
             $dtdvc_td_b    = '<td>' . $font_tag;
-            $dtdvc_td_ar_b = "<td align='right'>" . $font_tag;
-            $dtdvc_td_ac_b = "<td align='center'>" . $font_tag;
+            $dtdvc_td_ar_b = "<td style='text-align: right'>" . $font_tag;
+            $dtdvc_td_ac_b = "<td style='text-align: center'>" . $font_tag;
             $dtdvc_td_e    = '</font></td>';
             $dtdvc_td_eb   = $dtdvc_td_e . $dtdvc_td_b;
             if (($entry_no++ % 2) === 0) {
@@ -746,26 +732,25 @@ class HMInventoryReportCreator extends IPSModule
         }
 
         if ($HM_module_num === 0) {
-            $HTML_dvcs .= "<tr><td colspan=20 align='center'><br/><font size='4' color='#DDDDDD'>No HomeMatic devices found!</font></td></tr>";
+            $HTML_dvcs .= "<tr><td colspan=20 style='text-align: center; color: #DDDDDD; font-size: large'><br/>No HomeMatic devices found!</td></tr>";
         }
 
         $HTML_dvcs .= '</td></tr>';
 
         // Some comments
         //
-        $HTML_notes = "<tr><td colspan=20><table width='100%' align='left'><hr><color='#666666'><tr><td> </td></tr></table></td></tr>";
-        $HTML_notes .= "<tr><td colspan=20><table width='100%' align='left'><tr><td><font size='3' color='#DDDDDD'>Notes:</font></td></tr>";
-        $HTML_notes .= "<tr><td><font size='2' color='#DDDDDD'><ol>";
+        $HTML_notes = "<tr><td colspan=20><table style='width: 100%; text-align: left; color: #666666'><hr><tr><td> </td></tr></table></td></tr>";
+        $HTML_notes .= "<tr><td colspan=20><table style='width: 100%; text-align: left; font-size:medium; color: #DDDDDD'><tr><td>Notes:</td></tr>";
+        $HTML_notes .= "<tr><td style='font-size: smaller; color: #DDDDDD'><ol>";
         $HTML_notes .= '<li>Interfaces: bold letters indicate the default BidCos-Interface.</li>';
         $HTML_notes .= '<li>Level-pairs: the left value is showing the last signal level received by the device from the interface,';
         $HTML_notes .= ' while the right value is showing the last signal level received by the interface from the device.</li>';
-        //$HTML_notes .= "<li>Level-pairs: italic letters of the level-pair indicate the BidCos-Interface associated with the device";
         $HTML_notes .= '<li>Level-pairs: underlined letters of the level-pair indicate the BidCos-Interface associated with the device';
         $HTML_notes .= ' (or all interfaces when Roaming is enabled for the device).</li>';
         $HTML_notes .= '<li>Level-pairs: the yellow level-pair indicates the BidCos-Interface with best signal quality.</li>';
         $HTML_notes .= "<li>Devices without level-pairs haven't send/received anything since last start of the BidCos-service or are wired.</li>";
         $HTML_notes .= '<li>BidCos channels assigned to more than one IPS-device are shown in red.</li>';
-        $HTML_notes .= '</ol></font></td></tr>';
+        $HTML_notes .= '</ol></td></tr>';
         $HTML_notes .= '</table></td></tr>';
 
         $HTML_end = '</table>';
@@ -781,13 +766,13 @@ class HMInventoryReportCreator extends IPSModule
                 echo sprintf('File "%s" not writable!' . PHP_EOL . PHP_EOL, $OutputFileName);
                 return false;
             }
-            fwrite($HTML_file, '<html><head><style type="text/css">');
+            fwrite($HTML_file, '<html><head><style>');
             fwrite($HTML_file, 'html,body {font-family:Arial,Helvetica,sans-serif;font-size:12px;background-color:#000000;color:#dddddd;}');
             fwrite($HTML_file, '</style></head><body>');
             fwrite($HTML_file, $HTML_intro);
             fwrite(
                 $HTML_file,
-                "<tr><td colspan=3><table width='100%' align='left' bgcolor=#112233><tr><td><h1>HM inventory</h1></td></tr></table></td></tr>"
+                "<tr><td colspan=3><table style='width: 100%; text-align: left; background-color: #112233'><tr><td><h1>HM inventory</h1></td></tr></table></td></tr>"
             );
             fwrite($HTML_file, $HTML_ifcs);
             fwrite($HTML_file, $HTML_sep);
