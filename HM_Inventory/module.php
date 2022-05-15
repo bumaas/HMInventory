@@ -158,7 +158,13 @@ class HMInventoryReportCreator extends IPSModule
         // get the IP devices
         $xml_rtnmsg = $this->SendRequestMessage('listDevices', [], $BidCos_IP_Service_adr, $ParentConfig['UseSSL'], $ParentConfig['Password'], $ParentConfig['Username']);
         if ($xml_rtnmsg->errno === 0) {
-            $this->SendDebug('received (xmlrpc):', json_encode($xml_rtnmsg->value()), 0);
+            $this->SendDebug('received (xmlrpc):', 'Länge: ' . (string) strlen($xml_rtnmsg->value()), 0);
+            $this->SendDebug('received (xmlrpc):', $xml_rtnmsg->value(), 0);
+            $json_xml_rtnmsg = json_encode($xml_rtnmsg->value());
+            $chunks = str_split($json_xml_rtnmsg, 5000);
+            foreach ($chunks as $chunk){
+                $this->SendDebug('received (xmlrpc):', $chunk, 0);
+            }
             $hm_IP_dev_list = php_xmlrpc_decode($xml_rtnmsg->value());
             foreach ($hm_IP_dev_list as $device) {
                 if ($device['PARENT'] === '') {
