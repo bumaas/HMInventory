@@ -890,18 +890,10 @@ class HMInventoryReportCreator extends IPSModule
         $ScriptReturn = $this->SendScript($HMAddress, $HMScript);
         $HMChannelName = json_decode($ScriptReturn, true)['Name'];
 
-        if (is_array($HMChannelName)){
-            trigger_error( sprintf('Unexpected Script Return: %s (HMAddress: %s, HMDeviceAddress: %s)', $ScriptReturn, $HMAddress, $HMDeviceAddress), E_USER_NOTICE);
+        if (!is_string($HMChannelName)){ //Wenn der ChannelName auf HM Seite leer ist, dann kommt ein leeres Array zurück
+            $HMChannelName = '';
         }
-        if (is_array($HMAddress)){
-            trigger_error( sprintf('Array detected: %s', print_r($HMAddress, true)), E_USER_NOTICE);
-        }
-        if (is_array($HMDeviceAddress)){
-            trigger_error( sprintf('Array detected: %s', print_r($HMDeviceAddress, true)), E_USER_NOTICE);
-        }
-        if (is_array($HMChannelName)){
-            trigger_error( sprintf('Array detected: %s', print_r($HMChannelName, true)), E_USER_NOTICE);
-        }
+
         $this->SendDebug(__FUNCTION__, sprintf('HMAddress: %s, HMDeviceAddress: %s -> %s', $HMAddress, $HMDeviceAddress, $HMChannelName), 0);
         return $HMChannelName;
     }
