@@ -887,7 +887,12 @@ class HMInventoryReportCreator extends IPSModule
     {
         $HMScript = 'Name = (xmlrpc.GetObjectByHSSAddress(interfaces.GetAt(0), "' . $HMDeviceAddress . '")).Name();' . PHP_EOL;
 
-        $HMChannelName = json_decode($this->SendScript($HMAddress, $HMScript), true)['Name'];
+        $ScriptReturn = $this->SendScript($HMAddress, $HMScript);
+        $HMChannelName = json_decode($ScriptReturn, true)['Name'];
+
+        if (is_array($HMChannelName)){
+            trigger_error( sprintf('Unexpected Script Return: %s', $ScriptReturn), E_USER_NOTICE);
+        }
         if (is_array($HMAddress)){
             trigger_error( sprintf('Array detected: %s', print_r($HMAddress, true)), E_USER_NOTICE);
         }
