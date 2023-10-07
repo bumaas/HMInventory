@@ -790,7 +790,11 @@ class HMInventoryReportCreator extends IPSModule
     {
         $this->RegisterPropertyBoolean(self::PROP_SAVEDEVICELISTINVARIABLE, false);
         $this->RegisterPropertyBoolean('SaveHMArrayInVariable', false);
-        $this->RegisterPropertyString(self::PROP_OUTPUTFILE, IPS_GetKernelDir() . 'HM_inventory.html');
+        $path = 'user' . DIRECTORY_SEPARATOR . 'HM_inventory.html';
+        if (file_exists(IPS_GetKernelDir() . 'webfront')) {
+            $path = 'webfront\\' . $path;
+        }
+        $this->RegisterPropertyString(self::PROP_OUTPUTFILE, IPS_GetKernelDir() . $path);
         $this->RegisterPropertyInteger('SortOrder', 0);
         $this->RegisterPropertyBoolean(self::PROP_SHOWVIRTUALKEYENTRIES, false);
         $this->RegisterPropertyBoolean(self::PROP_SHOWMAINTENANCEENTRIES, true);

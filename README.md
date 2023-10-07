@@ -64,17 +64,17 @@ Erstellt den Report mit allen Homeatic Devices entsprechend der in der Instanz e
 
 ### HM Inventory Report Creator
 
-| Eigenschaft | Typ     | Standardwert            | Funktion                                  |
-| :--------- | :-----: | :------------------------| :--------------------------------------- |
-| OutputFile  | string  | \<IPS Kernel Verzeichnis>/HM_inventory.html     | wenn ein Dateiname angegeben ist, wird die Ausgabe im HTML Format in diese Datei geschrieben |
-| SortOrder   | integer | 0                       | Sortierreihenfolge der HM Devices in der Ausgabeliste:<br>0 - HM address (default)<br>1 - HM device type<br>2 - HM channel type<br>3 - IPS device name<br>4 - HM device name (nur in Verbindung mit ShowHMConfiguratorDeviceNames == true)|
-| ShowLongIPSDeviceNames   | boolean | false      | legt fest, ob IPS Namen mit oder ohne vollständigem Pfad ausgegeben werden sollen |
-| ShowVirtualKeyEntries   | boolean | false       | legt fest, ob die Virtuellen Kanäle der Homematic ausgegeben werden sollen |
-| ShowHMConfiguratorDeviceNames | boolean | true  | legt fest, ob die in der Homematic gewählten Bezeichnungen ausgegeben werden sollen |
-| ShowMaintenanceEntries | boolean | true         | legt fest, ob die MAINTENANCE (0) Kanäle ausgegeben werden sollen |
-| ShowNotUsedChannels | boolean | true         | legt fest, ob auch die Kanäle ausgegeben werden sollen, die nicht in IP-Symcon genutzt werden |
-| SaveDeviceListInVariable | boolean | false      | legt fest, ob die Liste der gefundenen Devices json codiert in einer Stringvariablen gespeichert werden soll|
-| UpdateIntervall | integer | 0                   | legt fest, in welchem regelmäßigen Abstand (in Minuten) der Report aufbereitet werden soll (0: deaktiviert)|
+| Eigenschaft | Typ     | Standardwert                                     | Funktion                                                                                                                                                                                                                                                      |
+| :--------- | :-----: |:-------------------------------------------------|:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| OutputFile  | string  | \<IPS Kernel Verzeichnis>/user/HM_inventory.html | wenn ein Dateiname angegeben ist, wird die Ausgabe im HTML Format in diese Datei geschrieben. Wird die Datei im User Verzeichnis abgelegt, so kann sie über die Adresse "https://<ip des Symcon Servers>/user/HM_inventory.html" im Browser angezeigt werden. |
+| SortOrder   | integer | 0                                                | Sortierreihenfolge der HM Devices in der Ausgabeliste:<br>0 - HM address (default)<br>1 - HM device type<br>2 - HM channel type<br>3 - IPS device name<br>4 - HM device name (nur in Verbindung mit ShowHMConfiguratorDeviceNames == true)                    |
+| ShowLongIPSDeviceNames   | boolean | false                                            | legt fest, ob IPS Namen mit oder ohne vollständigem Pfad ausgegeben werden sollen                                                                                                                                                                             |
+| ShowVirtualKeyEntries   | boolean | false                                            | legt fest, ob die Virtuellen Kanäle der Homematic ausgegeben werden sollen                                                                                                                                                                                    |
+| ShowHMConfiguratorDeviceNames | boolean | true                                             | legt fest, ob die in der Homematic gewählten Bezeichnungen ausgegeben werden sollen                                                                                                                                                                           |
+| ShowMaintenanceEntries | boolean | true                                             | legt fest, ob die MAINTENANCE (0) Kanäle ausgegeben werden sollen                                                                                                                                                                                             |
+| ShowNotUsedChannels | boolean | true                                             | legt fest, ob auch die Kanäle ausgegeben werden sollen, die nicht in IP-Symcon genutzt werden                                                                                                                                                                 |
+| SaveDeviceListInVariable | boolean | false                                            | legt fest, ob die Liste der gefundenen Devices json codiert in einer Stringvariablen gespeichert werden soll                                                                                                                                                  |
+| UpdateIntervall | integer | 0                                                | legt fest, in welchem regelmäßigen Abstand (in Minuten) der Report aufbereitet werden soll (0: deaktiviert)                                                                                                                                                   |
 
 
 ## 6. Anhang
