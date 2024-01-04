@@ -2,6 +2,7 @@
   "translations": {
     "de": {
       "This Instance creates a Report with all Homematic Devices.": "Die Instanz erstellt einen Bericht mit allen Homematic Geräten.",
+      "active": "aktiv",
       "The Report is created as HTML file if a file name is given": "Der Bericht wird als HTML Datei erstellt, wenn ein Dateiname angegeben ist",
       "Output File": "Ausgabedatei",
       "Select the order how the device list should be sorted": "Auswahl der Sortierung, nach der die Geräte aufgelistet werden",

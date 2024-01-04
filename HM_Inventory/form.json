@@ -1,6 +1,7 @@
 {
   "elements": [
     {"type": "Label", "caption": "This Instance creates a Report with all Homematic Devices."},
+    {"type": "CheckBox", "name": "active", "caption":  "active"},
     {"type": "Label", "caption": "The Report is created as HTML file if a file name is given"},
     {"type": "ValidationTextBox", "name": "OutputFile", "caption": "Output File"},
     {"type": "Label", "caption": "Select the order how the device list should be sorted"},

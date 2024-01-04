@@ -11,21 +11,26 @@ include_once __DIR__ . '/../libs/phpxmlrpc-4.3.0/lib/xmlrpc.inc';
 /** @noinspection AutoloadingIssuesInspection */
 class HMInventoryReportCreator extends IPSModule
 {
+    private const SERVICETYPES = ['RF', 'IP', 'WR'];
+    private const ERROR_MSG    = "Can't get any device information from the BidCoS-%s-Service";
+
     // Some color options for the HTML output
     private const BG_COLOR_GLOBAL         = '#181818';         // Global background color
     private const BG_COLOR_INTERFACE_LIST = '#223344';         // Background color for the interface list
     private const BG_COLOR_HEADLINE       = '#334455';         // Background color for the header line of the device list
     private const BG_COLOR_ODDLINE        = '#181818';         // Background color for the odd lines of the device list
     private const BG_COLOR_EVENLINE       = '#1A2B3C';         // Background color for the even lines of the device list
+    private const INVALID_LEVEL           = 65536;
 
     //property names
-    private const PROP_OUTPUTFILE = 'OutputFile';
-    private const PROP_SHOWMAINTENANCEENTRIES = 'ShowMaintenanceEntries';
-    private const PROP_SHOWVIRTUALKEYENTRIES = 'ShowVirtualKeyEntries';
+    private const PROP_ACTIVE                   = 'active';
+    private const PROP_OUTPUTFILE               = 'OutputFile';
+    private const PROP_SHOWMAINTENANCEENTRIES   = 'ShowMaintenanceEntries';
+    private const PROP_SHOWVIRTUALKEYENTRIES    = 'ShowVirtualKeyEntries';
     private const PROP_SAVEDEVICELISTINVARIABLE = 'SaveDeviceListInVariable';
 
     // Überschreibt die interne IPS_Create($id) Funktion
-    public function Create()
+    public function Create(): void
     {
         // Diese Zeile nicht löschen.
         parent::Create();
@@ -36,16 +41,17 @@ class HMInventoryReportCreator extends IPSModule
 
         //we will wait until the kernel is ready
         $this->RegisterMessage(0, IPS_KERNELMESSAGE);
-
     }
 
-    public function ApplyChanges()
+    public function ApplyChanges(): void
     {
         //Never delete this line!
         parent::ApplyChanges();
 
         //Set receive filter to something that will never match
-        $this->SetReceiveDataFilter('Dieser Filter sollte niemals greifen, daher ist er etwas länger :-'); //es werden keine Nachrichten vom verbundenen Socket verarbeitet
+        $this->SetReceiveDataFilter(
+            'Dieser Filter sollte niemals greifen, daher ist er etwas länger :-'
+        ); //es werden keine Nachrichten vom verbundenen Socket verarbeitet
 
         if (IPS_GetKernelRunlevel() !== KR_READY) {
             return;
@@ -60,7 +66,7 @@ class HMInventoryReportCreator extends IPSModule
         $this->SetSummary($this->ReadPropertyString(self::PROP_OUTPUTFILE));
     }
 
-    public function MessageSink($TimeStamp, $SenderID, $Message, $Data)
+    public function MessageSink($TimeStamp, $SenderID, $Message, $Data): void
     {
         parent::MessageSink($TimeStamp, $SenderID, $Message, $Data);
 
@@ -69,9 +75,9 @@ class HMInventoryReportCreator extends IPSModule
         }
     }
 
-    public function ReceiveData($JSONString)
+    public function ReceiveData($JSONString): bool
     {
-        trigger_error(sprintf ('Fatal error: no ReceiveData expected. (%s)', $JSONString));
+        trigger_error(sprintf('Fatal error: no ReceiveData expected. (%s)', $JSONString));
 
         return parent::ReceiveData($JSONString);
     }
@@ -96,119 +102,46 @@ class HMInventoryReportCreator extends IPSModule
 
         // Get the required data from the BidCos-Services (RF, IP, Wired)
 
-        $ParentId = @IPS_GetInstance($this->InstanceID)['ConnectionID'];
-        $this->SendDebug('Parent', sprintf('%s (#%s)', IPS_GetName($ParentId), $ParentId), 0);
-        if ($ParentId === 0) {
-            echo 'Gateway is not configured!' . PHP_EOL . PHP_EOL;
+        $ParentId = $this->fetchParentId();
+        if (!$this->isGatewayActive($ParentId)) {
             return false;
         }
 
-        if (($this->GetStatus() !== IS_ACTIVE) || !$this->HasActiveParent()) {
-            echo 'Instance is not active!' . PHP_EOL . PHP_EOL;
-            return false;
-        }
-
-        $ParentConfig = json_decode(IPS_GetConfiguration($ParentId), true);
+        $ParentConfig  = json_decode(IPS_GetConfiguration($ParentId), true, 512, JSON_THROW_ON_ERROR);
+        $moduleVersion = $this->getModuleVersion();
 
         $IP_adr_Homematic = IPS_GetProperty($ParentId, 'Host');
 
-        if ($ParentConfig['UseSSL']) {
-            $BidCos_Wired_Service_adr = sprintf('https://%s:%s', $IP_adr_Homematic, $ParentConfig['WRSSLPort']);
-            $BidCos_RF_Service_adr    = sprintf('https://%s:%s', $IP_adr_Homematic, $ParentConfig['RFSSLPort']);
-            $BidCos_IP_Service_adr    = sprintf('https://%s:%s', $IP_adr_Homematic, $ParentConfig['IPSSLPort']);
-        } else {
-            $BidCos_Wired_Service_adr = sprintf('http://%s:%s', $IP_adr_Homematic, $ParentConfig['WRPort']);
-            $BidCos_RF_Service_adr    = sprintf('http://%s:%s', $IP_adr_Homematic, $ParentConfig['RFPort']);
-            $BidCos_IP_Service_adr    = sprintf('http://%s:%s', $IP_adr_Homematic, $ParentConfig['IPPort']);
-        }
+        [$BidCos_RF_Service_adr, $BidCos_IP_Service_adr] = $this->formatServiceAddresses($ParentConfig, $IP_adr_Homematic);
 
-        $filename      = __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . 'library.json';
-        $library       = json_decode(file_get_contents($filename), true);
-        $moduleVersion = sprintf('%s.%s', $library['version'], $library['build']);
-
-
-        $hm_RF_dev_list                = [];
-        $hm_RF_parent_devices_count    = 0;
-        $hm_IP_dev_list                = [];
-        $hm_IP_parent_devices_count    = 0;
-        $hm_Wired_dev_list             = [];
-        $hm_Wired_parent_devices_count = 0;
-        $err                           = 0;
-
-        //print_r($this->LoadHMScript($IP_adr_Homematic, $BidCos_RF_Service_adr, 'listDevices'));
-
-        // get the RF devices
-        $xml_rtnmsg = $this->SendRequestMessage('listDevices', [], $BidCos_RF_Service_adr, $ParentConfig['UseSSL'], $ParentConfig['Password'], $ParentConfig['Username']);
-        if ($xml_rtnmsg->errno === 0) {
-            $hm_RF_dev_list = php_xmlrpc_decode($xml_rtnmsg->value());
-            $this->SendDebug('received (RF_dev_list):', json_encode($hm_RF_dev_list), 0);
-            foreach ($hm_RF_dev_list as $device) {
-                if (($device['PARENT'] === '') && ($device['ADDRESS'] !== 'BidCoS-RF')) {
-                    //echo sprintf('%s'.PHP_EOL, $device['ADDRESS']);
-                    $hm_RF_parent_devices_count++;
-                }
-                //echo $device
-            }
-            //print_r($hm_RF_dev_list);
-        } else {
-            $this->SendDebug('Error', "Can't get any device information from the BidCoS-RF-Service", 0);
-            $err++;
-        }
-
-        // get the IP devices
-        $xml_rtnmsg = $this->SendRequestMessage('listDevices', [], $BidCos_IP_Service_adr, $ParentConfig['UseSSL'], $ParentConfig['Password'], $ParentConfig['Username']);
-        if ($xml_rtnmsg->errno === 0) {
-            $hm_IP_dev_list = php_xmlrpc_decode($xml_rtnmsg->value());
-            $this->SendDebug('received (IP_dev_list):', json_encode($hm_IP_dev_list), 0);
-            foreach ($hm_IP_dev_list as $device) {
-                if ($device['PARENT'] === '') {
-                    //echo sprintf('%s' . PHP_EOL, $device['ADDRESS']);
-                    $hm_IP_parent_devices_count++;
-                }
-            }
-            //print_r($hm_IP_dev_list);
-        } else {
-            $this->SendDebug('Error', "Can't get any device information from the BidCos-IP-Service", 0);
-            $err += 2;
-        }
-
-        // get the Wired devices
-        $xml_rtnmsg = $this->SendRequestMessage('listDevices', [], $BidCos_Wired_Service_adr, $ParentConfig['UseSSL'], $ParentConfig['Password'], $ParentConfig['Username']);
-        if ($xml_rtnmsg->errno === 0) {
-            $hm_Wired_dev_list = php_xmlrpc_decode($xml_rtnmsg->value());
-            $this->SendDebug('received (Wired_dev_list):', json_encode($hm_Wired_dev_list), 0);
-            foreach ($hm_Wired_dev_list as $device) {
-                if (($device['PARENT'] === '') && ($device['ADDRESS'] !== 'BidCoS-Wir')) {
-                    //echo sprintf('%s' . PHP_EOL, $device['ADDRESS']);
-                    $hm_Wired_parent_devices_count++;
-                }
-            }
-            //print_r($hm_Wired_dev_list);
-        } else {
-            $this->SendDebug('Error', "Can't get any device information from the BidCos-Wired-Service", 0);
-            $err += 4;
-        }
-
-        // merge all devices
-        $hm_dev_list = array_merge($hm_RF_dev_list, $hm_IP_dev_list, $hm_Wired_dev_list);
+        [$hm_dev_list, $dev_counter, $err] = $this->getDeviceLists($ParentId, $ParentConfig);
         if (count($hm_dev_list) === 0) {
             trigger_error("Can't get any device information from the BidCos-Services (Error: $err)", E_USER_ERROR);
         }
-        //print_r($hm_dev_list);
 
+
+        //print_r($hm_dev_list);
+        //print_r($dev_counter);
+
+        $this->progressBarInit();
         $progressBarCounter = 0;
-        $this->UpdateFormField('ProgressBar', 'maximum', 9);
-        $this->UpdateFormField('ProgressBar', 'visible', true);
 
 
         // get all BidCos Interfaces
         $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter++);
 
-        $xml_rtnmsg = $this->SendRequestMessage('listBidcosInterfaces', [], $BidCos_RF_Service_adr, $ParentConfig['UseSSL'], $ParentConfig['Password'], $ParentConfig['Username']);
+        $xml_rtnmsg = $this->SendRequestMessage(
+            'listBidcosInterfaces',
+            [],
+            $BidCos_RF_Service_adr,
+            $ParentConfig['UseSSL'],
+            $ParentConfig['Password'],
+            $ParentConfig['Username']
+        );
 
         if ($xml_rtnmsg->errno === 0) {
             $hm_BidCos_Ifc_list = php_xmlrpc_decode($xml_rtnmsg->value());
-            $this->SendDebug('received (BidCos_Ifc_list):', json_encode($hm_BidCos_Ifc_list), 0);
+            $this->SendDebug('received (BidCos_Ifc_list):', json_encode($hm_BidCos_Ifc_list, JSON_THROW_ON_ERROR), 0);
             //nach 'DEFAULT' sortieren, damit die CCU an erster Stelle steht.
             $default = array_column($hm_BidCos_Ifc_list, 'DEFAULT');
             array_multisort($default, SORT_DESC, $hm_BidCos_Ifc_list);
@@ -270,10 +203,6 @@ class HMInventoryReportCreator extends IPSModule
             $hm_chld_dev   = null;
             $hm_par_dev    = null;
 
-            if ((float) IPS_GetKernelVersion() < 5.6) {
-                set_time_limit(60); //Abfragen dauern manchmal länger als 30 Sekunden
-            }
-
             foreach ($hm_dev_list as $hm_dev) {
                 if ($hm_dev['ADDRESS'] === $HM_address) {
                     $hm_chld_dev = $hm_dev;
@@ -286,17 +215,14 @@ class HMInventoryReportCreator extends IPSModule
                         $HM_device = $hm_dev['PARENT_TYPE'];
                     }
                     if ($this->ReadPropertyBoolean('ShowHMConfiguratorDeviceNames')) {
-                        $HM_devname = $this->GetHMChannelName($IP_adr_Homematic, $hm_dev['ADDRESS']);
+                        $HM_devname = $this->getHMChannelName($IP_adr_Homematic, $hm_dev['ADDRESS']);
                     }
-                    if ($hm_par_dev !== null) {
-                        $HM_FWversion = $hm_par_dev['FIRMWARE'];
-                        $HM_Interface = $hm_par_dev['INTERFACE'] ?? '';
-                        if (isset($hm_par_dev['ROAMING']) && $hm_par_dev['ROAMING']) {
-                            $HM_Roaming = '+';
-                        } else {
-                            $HM_Roaming = '-';
-                        }
-                    }
+
+                    $device_info = $this->extractDeviceInfo($hm_par_dev);
+
+                    $HM_FWversion = $device_info['FIRMWARE'];
+                    $HM_Interface = $device_info['INTERFACE'];
+                    $HM_Roaming   = $device_info['ROAMING'];
 
                     $HM_devtype = $hm_dev['TYPE'];
                     if (isset($hm_dev['DIRECTION'])) {
@@ -305,8 +231,6 @@ class HMInventoryReportCreator extends IPSModule
                         } elseif ($hm_dev['DIRECTION'] === 2) {
                             $HM_direction = 'RX';
                         }
-                    } else {
-                        $HM_direction = '-';
                     }
                     if (isset($hm_dev['AES_ACTIVE']) && ($hm_dev['AES_ACTIVE'] !== 0)) {
                         $HM_AES_active = '+';
@@ -383,25 +307,18 @@ class HMInventoryReportCreator extends IPSModule
                         }
                     }
                     if ($hm_chld_dev !== null) {
-                        $HM_FWversion = '';
-                        $HM_Interface = '';
-                        $HM_Roaming   = '';
                         $HM_module_num++;
                         $HM_device  = $hm_chld_dev['PARENT_TYPE'];
                         $HM_devname = '-';
                         if ($this->ReadPropertyBoolean('ShowHMConfiguratorDeviceNames')) {
-                            $HM_devname = $this->GetHMChannelName($IP_adr_Homematic, $HM_address);
+                            $HM_devname = $this->getHMChannelName($IP_adr_Homematic, $HM_address);
                         }
 
-                        if ($hm_par_dev !== null) {
-                            $HM_FWversion = $hm_par_dev['FIRMWARE'];
-                            $HM_Interface = $hm_par_dev['INTERFACE'] ?? '';
-                            if (isset($hm_par_dev['ROAMING']) && $hm_par_dev['ROAMING']) {
-                                $HM_Roaming = '+';
-                            } else {
-                                $HM_Roaming = '-';
-                            }
-                        }
+                        $device_info = $this->extractDeviceInfo($hm_par_dev);
+
+                        $HM_FWversion = $device_info['FIRMWARE'];
+                        $HM_Interface = $device_info['INTERFACE'];
+                        $HM_Roaming   = $device_info['ROAMING'];
 
                         $HM_devtype    = $hm_chld_dev['TYPE'];
                         $HM_direction  = '-';
@@ -439,7 +356,14 @@ class HMInventoryReportCreator extends IPSModule
         //
         $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter++);
 
-        $xml_rtnmsg = $this->SendRequestMessage('rssiInfo', [], $BidCos_RF_Service_adr, $ParentConfig['UseSSL'], $ParentConfig['Password'], $ParentConfig['Username']);
+        $xml_rtnmsg = $this->SendRequestMessage(
+            'rssiInfo',
+            [],
+            $BidCos_RF_Service_adr,
+            $ParentConfig['UseSSL'],
+            $ParentConfig['Password'],
+            $ParentConfig['Username']
+        );
 
         $hm_lvl_list = [];
         if ($xml_rtnmsg->errno === 0) {
@@ -470,7 +394,7 @@ class HMInventoryReportCreator extends IPSModule
                                     $HM_dev['HM_Interface'] === $hm_ifce['ADDRESS'],
                                     false
                                 ];
-                                if ($hm_levels[$hm_ifce['ADDRESS']][1] !== 65536) {
+                                if ($hm_levels[$hm_ifce['ADDRESS']][1] !== self::INVALID_LEVEL) {
                                     if ($best_lvl_ifce === -1) {
                                         $best_lvl_ifce = $ifce_no;
                                     } elseif ($HM_lvl_array[$best_lvl_ifce][1] < $hm_levels[$hm_ifce['ADDRESS']][1]) {
@@ -478,7 +402,7 @@ class HMInventoryReportCreator extends IPSModule
                                     }
                                 }
                             } else {
-                                $HM_lvl_array[] = [65536, 65536, false, false];
+                                $HM_lvl_array[] = [self::INVALID_LEVEL, self::INVALID_LEVEL, false, false];
                             }
                             $ifce_no++;
                         }
@@ -500,7 +424,7 @@ class HMInventoryReportCreator extends IPSModule
         //
         $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter++);
 
-        usort($HM_array, 'self::usort_HM_address');
+        usort($HM_array, self::usort_HM_address(...));
 
         $previous_hm_adr    = '';
         $previous_hm_levels = [];
@@ -511,17 +435,24 @@ class HMInventoryReportCreator extends IPSModule
                 continue;
             }
             if ($hm_adr[0] !== $previous_hm_adr) {
-                $params = [
+                $params     = [
                     new xmlrpcval($hm_adr[0] . ':0', 'string'),
                     new xmlrpcval('VALUES', 'string')
                 ];
-                $xml_rtnmsg = $this->SendRequestMessage('getParamset', $params, $BidCos_IP_Service_adr, $ParentConfig['UseSSL'], $ParentConfig['Password'], $ParentConfig['Username']);
+                $xml_rtnmsg = $this->SendRequestMessage(
+                    'getParamset',
+                    $params,
+                    $BidCos_IP_Service_adr,
+                    $ParentConfig['UseSSL'],
+                    $ParentConfig['Password'],
+                    $ParentConfig['Username']
+                );
 
                 if ($xml_rtnmsg->errno === 0) {
                     $HM_ParamSet = php_xmlrpc_decode($xml_rtnmsg->value());
                     //print_r($HM_ParamSet);
-                    $HM_dev['HM_levels'][$HM_default_interface_no][0] = $HM_ParamSet['RSSI_PEER'] ?? 65536;
-                    $HM_dev['HM_levels'][$HM_default_interface_no][1] = $HM_ParamSet['RSSI_DEVICE'] ?? 65536;
+                    $HM_dev['HM_levels'][$HM_default_interface_no][0] = $HM_ParamSet['RSSI_PEER'] ?? self::INVALID_LEVEL;
+                    $HM_dev['HM_levels'][$HM_default_interface_no][1] = $HM_ParamSet['RSSI_DEVICE'] ?? self::INVALID_LEVEL;
                     $HM_dev['HM_levels'][$HM_default_interface_no][2] = false; //??
                     $HM_dev['HM_levels'][$HM_default_interface_no][3] = false; //best level
 
@@ -535,16 +466,15 @@ class HMInventoryReportCreator extends IPSModule
 
 
         //delete the Maintenance Channels and Virtual Keys if required
-        foreach ($HM_array as $key=> $HM_dev){
-            if ($HM_dev['HM_devtype'] === 'MAINTENANCE' && !$this->ReadPropertyBoolean(self::PROP_SHOWMAINTENANCEENTRIES)){
+        foreach ($HM_array as $key => $HM_dev) {
+            if ($HM_dev['HM_devtype'] === 'MAINTENANCE' && !$this->ReadPropertyBoolean(self::PROP_SHOWMAINTENANCEENTRIES)) {
                 unset ($HM_array[$key]);
             }
 
-            if ($HM_dev['HM_devtype'] === 'VIRTUAL_KEY' && !$this->ReadPropertyBoolean(self::PROP_SHOWVIRTUALKEYENTRIES)){
+            if ($HM_dev['HM_devtype'] === 'VIRTUAL_KEY' && !$this->ReadPropertyBoolean(self::PROP_SHOWVIRTUALKEYENTRIES)) {
                 unset ($HM_array[$key]);
             }
         }
-
 
 
         // Sort device list
@@ -552,19 +482,19 @@ class HMInventoryReportCreator extends IPSModule
         $SortOrder = $this->ReadPropertyInteger('SortOrder');
         switch ($SortOrder) {
             case 3: // by IPS-dev_name
-                usort($HM_array, 'self::usort_IPS_dev_name');
+                usort($HM_array, self::usort_IPS_dev_name(...));
                 break;
             case 0: // by HM-address
-                usort($HM_array, 'self::usort_HM_address');
+                usort($HM_array, self::usort_HM_address(...));
                 break;
             case 1: // by HM-device
-                usort($HM_array, 'self::usort_HM_device_adr');
+                usort($HM_array, self::usort_HM_device_adr(...));
                 break;
             case 2: //by HM-type
-                usort($HM_array, 'self::usort_HM_devtype');
+                usort($HM_array, self::usort_HM_devtype(...));
                 break;
             case 4: //by HM-device-name
-                usort($HM_array, 'self::usort_HM_devname');
+                usort($HM_array, self::usort_HM_devname(...));
                 break;
             default:
                 trigger_error('Unknown SortOrder: ' . $SortOrder);
@@ -574,39 +504,39 @@ class HMInventoryReportCreator extends IPSModule
 
         if ($this->ReadPropertyBoolean(self::PROP_SAVEDEVICELISTINVARIABLE)) {
             //SetValueString($this->GetIDForIdent('DeviceList'), json_encode($HM_array));
-            $this->SetValue('DeviceList', json_encode($HM_array)); //array in String variable speichern
+            $this->SetValue('DeviceList', json_encode($HM_array, JSON_THROW_ON_ERROR)); //array in String variable speichern
         }
 
         // Generate HTML output code
 
-        $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter++);
+        $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter);
 
         $HTML_intro = "<table width='100%' border='0' align='center' bgcolor=" . self::BG_COLOR_GLOBAL . '>';
 
+        $HM_inventory_str = sprintf('<b>HM Inventory (%s) </b><b>&nbsp found at %s</b>', $moduleVersion, date('d.m.Y H:i:s'));
+        $HM_interface_str = sprintf(
+            '%s HomeMatic interfaces (%s connected) with %s HM-RF devices, %s HM-wired devices and %s HmIP devices',
+            $HM_interface_num,
+            $HM_interface_connected_num,
+            $dev_counter['RF'],
+            $dev_counter['WR'],
+            $dev_counter['IP']
+        );
+        $IPS_instance_str = sprintf('%s IPS instances (connected to %s HM channels)', $IPS_device_num, $IPS_HM_channel_num);
+
         $HTML_ifcs = "<tr style='vertical-align: top'>";
-        $HTML_ifcs .= "<td><table style='text-align: left;font-size: large; color: #99AABB'><tr><td><b>HM Inventory ($moduleVersion) </b>";
-        $HTML_ifcs .= "<b>&nbsp found at " . strftime('%d.%m.%Y %X', time()) . '</b></td></tr>';
-        $HTML_ifcs .= "<tr><td style='font-size: small; color: #CCCCCC'>" . sprintf(
-                '%s HomeMatic interfaces (%s connected) with %s HM-RF devices, %s HM-wired devices and %s HmIP devices',
-                $HM_interface_num,
-                $HM_interface_connected_num,
-                $hm_RF_parent_devices_count,
-                $hm_Wired_parent_devices_count,
-                $hm_IP_parent_devices_count
-            ) . '</td>';
-        $HTML_ifcs .= "<tr><td style='font-size: small; color: #CCCCCC'>" . sprintf ('%s IPS instances (connected to %s HM channels)', $IPS_device_num, $IPS_HM_channel_num) . '</td>';
+        $HTML_ifcs .= "<td><table style='text-align: left;font-size: large; color: #99AABB'>";
+        $HTML_ifcs .= $this->generateTableRow('large', '#99AABB', $HM_inventory_str);
+        $HTML_ifcs .= $this->generateTableRow('small', '#CCCCCC', $HM_interface_str);
+        $HTML_ifcs .= $this->generateTableRow('small', '#CCCCCC', $IPS_instance_str);
         $HTML_ifcs .= '</table></td>';
         $HTML_ifcs .= "<td style='vertical-align: top'>&nbsp;</td>";
+        $HTML_ifcs .= "<td style='width: 40%; vertical-align: bottom;'><table style='width: 100%; text-align: right; background-color: "
+                      . self::BG_COLOR_INTERFACE_LIST . '\'>';
 
-        $HTML_ifcs .= "<td style='width: 40%; vertical-align: bottom;'><table style='width: 100%; text-align: right; background-color: " . self::BG_COLOR_INTERFACE_LIST . '\'>';
         //print_r($hm_BidCos_Ifc_list);
         foreach ($hm_BidCos_Ifc_list as $hm_ifce) {
-            $dtifc_td_b = "<td style='font-size: small;color: #EEEEEE'>" . ($hm_ifce['DEFAULT'] ? '<i>' : '');
-            $dtifc_td_e = ($hm_ifce['DEFAULT'] ? '</i>' : '') . '</td>';
-            $dsc_strg   = sprintf('%s', $hm_ifce['CONNECTED'] ? 'connected' : 'Not connected');
-            $ifce_info = sprintf('%s (Fw: %s, DC: %s%%)', $hm_ifce['ADDRESS'], $hm_ifce['FIRMWARE_VERSION'], $hm_ifce['DUTY_CYCLE']);
-            $HTML_ifcs  .= '<tr>' . $dtifc_td_b . 'Interface: ' . $ifce_info . '&nbsp' . $dtifc_td_e;
-            $HTML_ifcs  .= $dtifc_td_b . $hm_ifce['DESCRIPTION'] . $dtifc_td_e . $dtifc_td_b . $dsc_strg . $dtifc_td_e . '</tr>';
+            $HTML_ifcs .= $this->formatInterfaceRow($hm_ifce);
         }
         $HTML_ifcs .= '</table></td></tr>';
 
@@ -628,8 +558,8 @@ class HMInventoryReportCreator extends IPSModule
         $HTML_dvcs .= "<td style='width: 2%; text-align: center; color: #EEEEEE; font-size: medium'>Roa- ming</td>";
         foreach ($hm_BidCos_Ifc_list as $hm_ifce) {
             if ($hm_ifce['CONNECTED']) {
-                $HTML_dvcs .= "<td style='width: 6%; text-align: center; color: #EEEEEE; font-size: small'>" . $hm_ifce['ADDRESS'] . ' tx/rx&nbsp(db&micro;V)'
-                              . '</td>';
+                $HTML_dvcs .= "<td style='width: 6%; text-align: center; color: #EEEEEE; font-size: small'>" . $hm_ifce['ADDRESS']
+                              . ' tx/rx&nbsp(db&micro;V)' . '</td>';
             }
         }
         $HTML_dvcs .= '</tr>';
@@ -656,9 +586,10 @@ class HMInventoryReportCreator extends IPSModule
                 $r_bgcolor = self::BG_COLOR_EVENLINE;
             }
             $HTML_dvcs .= '<tr bgcolor=' . $r_bgcolor . '>' . $dtdvc_td_ar_b . $entry_no . '&nbsp&nbsp' . $dtdvc_td_eb;
-            $HTML_dvcs .= $HM_dev['IPS_id'] . $dtdvc_td_eb . utf8_decode($HM_dev['IPS_name']) . $dtdvc_td_eb . $HM_dev['HM_address'] . $dtdvc_td_eb;
+            $HTML_dvcs .= $HM_dev['IPS_id'] . $dtdvc_td_eb . mb_convert_encoding($HM_dev['IPS_name'], 'ISO-8859-1', 'UTF-8') . $dtdvc_td_eb
+                          . $HM_dev['HM_address'] . $dtdvc_td_eb;
             if ($this->ReadPropertyBoolean('ShowHMConfiguratorDeviceNames')) {
-                $HTML_dvcs .= utf8_decode($HM_dev['HM_devname']) . $dtdvc_td_eb;
+                $HTML_dvcs .= mb_convert_encoding($HM_dev['HM_devname'], 'ISO-8859-1', 'UTF-8') . $dtdvc_td_eb;
             }
             if (!$same_device) {
                 $HTML_dvcs .= $HM_dev['HM_device'] . $dtdvc_td_eb . $HM_dev['HM_FWversion'] . $dtdvc_td_eb;
@@ -681,26 +612,16 @@ class HMInventoryReportCreator extends IPSModule
                             }
                             if ($lciValue[3]) {
                                 if (($HM_dev['HM_Roaming'] === '+') || $lciValue[2]) {
-                                    $lvl_strg_color = '<font color=#DDDD66>';
+                                    $lvl_strg_color = '<#DDDD66>';
                                 } else {
-                                    $lvl_strg_color = '<font color=#FFFF88>';
+                                    $lvl_strg_color = '<#FFFF88>';
                                 }
                             } else {
-                                $lvl_strg_color = '<font color=#DDDDDD>';
+                                $lvl_strg_color = '<#DDDDDD>';
                             }
 
-                            //rx_lvl
-                            if ($lciValue[0] !== 65536) {
-                                $rx_strg = (string)$lciValue[0];
-                            } else {
-                                $rx_strg = '--';
-                            }
-                            //tx_lvl
-                            if ($lciValue[1] !== 65536) {
-                                $tx_strg = (string)$lciValue[1];
-                            } else {
-                                $tx_strg = '--';
-                            }
+                            [$rx_strg, $tx_strg] = $this->getRxTxLevelString($lciValue[0], $lciValue[1]);
+
                             if (($HM_dev['HM_Roaming'] === '+') || $lciValue[2]) {
                                 $lvl_strg = sprintf(
                                     '%s<ins>%s &#047 %s</ins></font>',
@@ -725,9 +646,7 @@ class HMInventoryReportCreator extends IPSModule
                 }
             } else {
                 $HTML_dvcs .= $dtdvc_td_e . '<td> </td>';
-                for ($lci = 0; $lci < $HM_interface_connected_num; $lci++) {
-                    $HTML_dvcs .= '<td> </td>';
-                }
+                $HTML_dvcs .= str_repeat('<td> </td>', $HM_interface_connected_num);
             }
         }
 
@@ -742,14 +661,18 @@ class HMInventoryReportCreator extends IPSModule
         $HTML_notes = "<tr><td colspan=20><table style='width: 100%; text-align: left; color: #666666'><hr><tr><td> </td></tr></table></td></tr>";
         $HTML_notes .= "<tr><td colspan=20><table style='width: 100%; text-align: left; font-size:medium; color: #DDDDDD'><tr><td>Notes:</td></tr>";
         $HTML_notes .= "<tr><td style='font-size: smaller; color: #DDDDDD'><ol>";
-        $HTML_notes .= '<li>Interfaces: bold letters indicate the default BidCos-Interface.</li>';
-        $HTML_notes .= '<li>Level-pairs: the left value is showing the last signal level received by the device from the interface,';
-        $HTML_notes .= ' while the right value is showing the last signal level received by the interface from the device.</li>';
-        $HTML_notes .= '<li>Level-pairs: underlined letters of the level-pair indicate the BidCos-Interface associated with the device';
-        $HTML_notes .= ' (or all interfaces when Roaming is enabled for the device).</li>';
-        $HTML_notes .= '<li>Level-pairs: the yellow level-pair indicates the BidCos-Interface with best signal quality.</li>';
-        $HTML_notes .= "<li>Devices without level-pairs haven't send/received anything since last start of the BidCos-service or are wired.</li>";
-        $HTML_notes .= '<li>BidCos channels assigned to more than one IPS-device are shown in red.</li>';
+
+        $notes = [
+            'Interfaces: bold letters indicate the default BidCos-Interface.',
+            'Level-pairs: the left value is showing the last signal level received by the device from the interface, while the right value is showing the last signal level received by the interface from the device.',
+            'Level-pairs: underlined letters of the level-pair indicate the BidCos-Interface associated with the device (or all interfaces when Roaming is enabled for the device).',
+            'Level-pairs: the yellow level-pair indicates the BidCos-Interface with best signal quality.',
+            'Devices without level-pairs haven\'t sent/received anything since last start of the BidCos-service or are wired.',
+            'BidCos channels assigned to more than one IPS-device are shown in red.'
+        ];
+        foreach ($notes as $note) {
+            $HTML_notes .= $this->createHtmlElement($note, 'li');
+        }
         $HTML_notes .= '</ol></td></tr>';
         $HTML_notes .= '</table></td></tr>';
 
@@ -758,7 +681,6 @@ class HMInventoryReportCreator extends IPSModule
         $this->UpdateFormField('ProgressBar', 'visible', false);
 
         // Output the results
-
         $OutputFileName = $this->ReadPropertyString(self::PROP_OUTPUTFILE);
         if ($OutputFileName) {
             $HTML_file = @fopen($OutputFileName, 'wb');
@@ -766,28 +688,252 @@ class HMInventoryReportCreator extends IPSModule
                 echo sprintf('File "%s" not writable!' . PHP_EOL . PHP_EOL, $OutputFileName);
                 return false;
             }
-            fwrite($HTML_file, '<html><head><style>');
-            fwrite($HTML_file, 'html,body {font-family:Arial,Helvetica,sans-serif;font-size:12px;background-color:#000000;color:#dddddd;}');
-            fwrite($HTML_file, '</style></head><body>');
-            fwrite($HTML_file, $HTML_intro);
-            fwrite(
-                $HTML_file,
-                "<tr><td colspan=3><table style='width: 100%; text-align: left; background-color: #112233'><tr><td><h1>HM inventory</h1></td></tr></table></td></tr>"
-            );
-            fwrite($HTML_file, $HTML_ifcs);
-            fwrite($HTML_file, $HTML_sep);
-            fwrite($HTML_file, $HTML_dvcs);
-            fwrite($HTML_file, $HTML_notes);
-            fwrite($HTML_file, $HTML_end);
-            fwrite($HTML_file, '</body></html>');
+
+            // Use single fwrite call
+            $htmlContent = $this->getHtmlContent($HTML_intro, $HTML_ifcs, $HTML_sep, $HTML_dvcs, $HTML_notes, $HTML_end);
+            fwrite($HTML_file, $htmlContent);
+
             return fclose($HTML_file);
         }
 
         return false;
     }
 
+    private function extractDeviceInfo($hm_par_dev): array
+    {
+        if ($hm_par_dev !== null) {
+            $HM_FWversion = $hm_par_dev['FIRMWARE'];
+            $HM_Interface = $hm_par_dev['INTERFACE'] ?? '';
+            if (isset($hm_par_dev['ROAMING']) && $hm_par_dev['ROAMING']) {
+                $HM_Roaming = '+';
+            } else {
+                $HM_Roaming = '-';
+            }
+        } else {
+            $HM_FWversion = '';
+            $HM_Interface = '';
+            $HM_Roaming   = '';
+        }
+        return ['FIRMWARE' => $HM_FWversion, 'INTERFACE' => $HM_Interface, 'ROAMING' => $HM_Roaming];
+    }
+
+    private function createHtmlElement($content, $containerTag, $props = ''): string
+    {
+        return "<$containerTag $props>$content</$containerTag>";
+    }
+
+    private function generateTableRow($fontSize, $color, $content): string
+    {
+        return "<tr><td style='font-size: $fontSize; color: $color'>$content</td>";
+    }
+
+    private function formatInterfaceRow($hm_ifce): string
+    {
+        $italicStart = $hm_ifce['DEFAULT'] ? '<i>' : '';
+        $italicEnd   = $hm_ifce['DEFAULT'] ? '</i>' : '';
+
+        $connectionStatus = $hm_ifce['CONNECTED'] ? 'connected' : 'Not connected';
+        $interfaceInfo    = sprintf('%s (Fw: %s, DC: %s%%)', $hm_ifce['ADDRESS'], $hm_ifce['FIRMWARE_VERSION'], $hm_ifce['DUTY_CYCLE']);
+
+        return "<tr>
+                <td style='font-size: small;color: #EEEEEE'>{$italicStart}Interface: $interfaceInfo&nbsp{$italicEnd}</td>
+                <td style='font-size: small;color: #EEEEEE'>{$italicStart}{$hm_ifce['DESCRIPTION']}{$italicEnd}</td>
+                <td style='font-size: small;color: #EEEEEE'>{$italicStart}{$connectionStatus}{$italicEnd}</td>
+            </tr>";
+    }
+
+    private function getRxTxLevelString($rx_lvl, $tx_lvl): array
+    {
+        return [
+            $rx_lvl !== self::INVALID_LEVEL ? (string)$rx_lvl : '--',
+            $tx_lvl !== self::INVALID_LEVEL ? (string)$tx_lvl : '--'
+        ];
+    }
+
+    /**
+     * Generates the HTML content for the report.
+     *
+     * @param string $HTML_intro The HTML content for the introduction section.
+     * @param string $HTML_ifcs  The HTML content for the interfaces section.
+     * @param string $HTML_sep   The HTML content for the separators section.
+     * @param string $HTML_dvcs  The HTML content for the devices section.
+     * @param string $HTML_notes The HTML content for the notes section.
+     * @param string $HTML_end   The HTML content for the ending section.
+     *
+     * @return string The generated HTML content.
+     */
+    private function getHtmlContent(
+        string $HTML_intro,
+        string $HTML_ifcs,
+        string $HTML_sep,
+        string $HTML_dvcs,
+        string $HTML_notes,
+        string $HTML_end
+    ): string {
+        return <<<HEREDOC
+<html lang="">
+<head>
+  <style>
+    html,body {font-family:Arial,Helvetica,sans-serif;font-size:12px;background-color:#000000;color:#dddddd;}
+  </style><title></title>
+</head>
+<body>
+  $HTML_intro
+  <tr>
+    <td colspan=3><table style='width: 100%; text-align: left; background-color: #112233'><tr><td><h1>HM inventory</h1></td></tr></table></td>
+  </tr>
+  $HTML_ifcs
+  $HTML_sep
+  $HTML_dvcs
+  $HTML_notes
+  $HTML_end
+</body>
+</html>
+HEREDOC;
+    }
+
+    private function fetchParentId(): int
+    {
+        return @IPS_GetInstance($this->InstanceID)['ConnectionID'];
+    }
+
+    private function isGatewayActive(int $parentId): bool
+    {
+        if ($parentId === 0) {
+            echo 'Gateway is not configured!' . PHP_EOL . PHP_EOL;
+            return false;
+        }
+        $this->SendDebug('Parent', sprintf('%s (#%s)', IPS_GetName($parentId), $parentId), 0);
+
+        if (($this->GetStatus() !== IS_ACTIVE) || !$this->HasActiveParent()) {
+            echo 'Instance is not active!' . PHP_EOL . PHP_EOL;
+            return false;
+        }
+        return true;
+    }
+
+    private function formatServiceAddresses(array $ParentConfig, string $IP_adr_Homematic): array
+    {
+        if ($ParentConfig['UseSSL']) {
+            $BidCos_RF_Service_adr = sprintf('https://%s:%s', $IP_adr_Homematic, $ParentConfig['RFSSLPort']);
+            $BidCos_IP_Service_adr = sprintf('https://%s:%s', $IP_adr_Homematic, $ParentConfig['IPSSLPort']);
+        } else {
+            $BidCos_RF_Service_adr = sprintf('http://%s:%s', $IP_adr_Homematic, $ParentConfig['RFPort']);
+            $BidCos_IP_Service_adr = sprintf('http://%s:%s', $IP_adr_Homematic, $ParentConfig['IPPort']);
+        }
+        return [$BidCos_RF_Service_adr, $BidCos_IP_Service_adr];
+    }
+
+    /**
+     * Retrieves the details of a library from a JSON file.
+     *
+     * @return array The details of the library as an associative array.
+     * @throws \JsonException
+     */
+    private function getLibraryDetails(): array
+    {
+        $filename = __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . 'library.json';
+        return json_decode(file_get_contents($filename), true, 512, JSON_THROW_ON_ERROR);
+    }
+
+    /**
+     * Retrieves the version of the module.
+     *
+     * @return string The version of the module in the format "{major version}.{build number}".
+     * @throws \JsonException
+     */
+    private function getModuleVersion(): string
+    {
+        $library = $this->getLibraryDetails();
+        return sprintf('%s.%s', $library['version'], $library['build']);
+    }
+
+    /**
+     * Processes HM devices by type and updates the device list, device counter, and error count.
+     *
+     * @param string  $deviceType   The type of device.
+     * @param int     $parentId     The ID of the parent.
+     * @param array   $parentConfig The configuration for the parent.
+     * @param array  &$hmDevList    The device list.
+     * @param array  &$devCounter   The device counter.
+     * @param int    &$err          The error count.
+     *
+     * @return void
+     * @throws \JsonException
+     */
+    private function processHmDevicesByType(
+        string $deviceType,
+        int $parentId,
+        array $parentConfig,
+        array &$hmDevList,
+        array &$devCounter,
+        int &$err
+    ): void {
+        $deviceHost      = IPS_GetProperty($parentId, 'Host');
+        $serviceAddress  = $this->getBidCosServiceAddress($deviceHost, $parentConfig, $deviceType);
+        $requestResponse = $this->SendRequestMessage(
+            'listDevices',
+            [],
+            $serviceAddress,
+            $parentConfig['UseSSL'],
+            $parentConfig['Password'],
+            $parentConfig['Username']
+        );
+
+        if ($requestResponse->errno === 0) {
+            $decodedResponse = php_xmlrpc_decode($requestResponse->value());
+            foreach ($decodedResponse as $device) {
+                if (($device['PARENT'] === '') && ($device['ADDRESS'] !== 'BidCoS-Wir')) {
+                    $devCounter[$deviceType]++;
+                }
+            }
+            $hmDevList = array_merge($hmDevList, $decodedResponse);
+        } else {
+            $this->SendDebug('Error', sprintf(self::ERROR_MSG, $deviceType), 0);
+            $err++;
+        }
+    }
+
+    /**
+     * Retrieves the device lists for a given parent ID and parent configuration.
+     *
+     * @param int   $parentId     The ID of the parent.
+     * @param array $parentConfig The configuration for the parent.
+     *
+     * @return array The device lists, devCounter, and error value.
+     * @throws \JsonException
+     */
+    private function getDeviceLists(int $parentId, array $parentConfig): array
+    {
+        $hmDevList  = [];
+        $devCounter = [];
+        $err        = 0;
+        foreach (self::SERVICETYPES as $type) {
+            $devCounter[$type] = 0;
+            $this->processHmDevicesByType($type, $parentId, $parentConfig, $hmDevList, $devCounter, $err);
+        }
+        return [$hmDevList, $devCounter, $err];
+    }
+
+    private function getBidCosServiceAddress(string $IP_adr_Homematic, array $ParentConfig, string $type): string
+    {
+        $useSSL = $ParentConfig['UseSSL'] ? 'https://%s:%s' : 'http://%s:%s';
+        $port   = $ParentConfig[$type . 'SSLPort'];
+        if (!$ParentConfig['UseSSL']) {
+            $port = $ParentConfig[$type . 'Port'];
+        }
+        return sprintf($useSSL, $IP_adr_Homematic, $port);
+    }
+
+    private function progressBarInit(): void
+    {
+        $this->UpdateFormField('ProgressBar', 'maximum', 9);
+        $this->UpdateFormField('ProgressBar', 'visible', true);
+    }
+
     private function RegisterProperties(): void
     {
+        $this->RegisterPropertyBoolean(self::PROP_ACTIVE, true);
         $this->RegisterPropertyBoolean(self::PROP_SAVEDEVICELISTINVARIABLE, false);
         $this->RegisterPropertyBoolean('SaveHMArrayInVariable', false);
         $path = 'user' . DIRECTORY_SEPARATOR . 'HM_inventory.html';
@@ -813,45 +959,71 @@ class HMInventoryReportCreator extends IPSModule
 
     private function SetInstanceStatus(): void
     {
-        if ($this->HasActiveParent()) {
+        if ($this->HasActiveParent() && $this->ReadPropertyBoolean(self::PROP_ACTIVE)) {
             $this->SetStatus(IS_ACTIVE);
         } else {
             $this->SetStatus(IS_INACTIVE);
         }
     }
 
- private function SendRequestMessage(string $methodName, array $params, string $BidCos_Service_adr, $UseSSL, string $Password, string $Username)
-    {
-     $xml_BidCos_client = new xmlrpc_client($BidCos_Service_adr);
-     if ($UseSSL) {
-         $xml_BidCos_client->setSSLVerifyHost(0);
-         $xml_BidCos_client->setSSLVerifyPeer(false);
-     }
-     if ($Password !== '') {
-         $xml_BidCos_client->setCredentials($Username, $Password);
-     }
+    private function SendRequestMessage(
+        string $methodName,
+        array $params,
+        string $BidCos_Service_adr,
+        $UseSSL,
+        string $Password,
+        string $Username
+    ): PhpXmlRpc\Response {
+        $xml_BidCos_client = new xmlrpc_client($BidCos_Service_adr);
+        if ($UseSSL) {
+            $xml_BidCos_client->setSSLVerifyHost(0);
+            $xml_BidCos_client->setSSLVerifyPeer(false);
+        }
+        if ($Password !== '') {
+            $xml_BidCos_client->setCredentials($Username, $Password);
+        }
 
-     $xml_reqmsg = new xmlrpcmsg($methodName, $params);
+        $xml_reqmsg = new xmlrpcmsg($methodName, $params);
 
-     $this->SendDebug('send (xmlrpc)', sprintf('send (xmlrpc):%s:%s, params: %s', $BidCos_Service_adr, $methodName, json_encode($params)), 0);
-     return $xml_BidCos_client->send($xml_reqmsg);
+        $this->SendDebug(
+            'send (xmlrpc)',
+            sprintf(
+                'send (xmlrpc):%s:%s, params: %s',
+                $BidCos_Service_adr,
+                $methodName,
+                json_encode($params, JSON_THROW_ON_ERROR)
+            ),
+            0
+        );
+        return $xml_BidCos_client->send($xml_reqmsg);
+    }
 
- }
-    private static function usort_HM_address(array $a, array $b)
+    /**
+     * Sorts an array of HM addresses in ascending order.
+     *
+     * The function compares the "HM_address" key of each array element using a case-insensitive comparison.
+     * If the "HM_address" is in the format "xxx:yyy" where xxx and yyy are numeric values, the function
+     * compares the numeric part of the address as well.
+     *
+     * @param array $a The first array element to compare.
+     * @param array $b The second array element to compare.
+     *
+     * @return int Returns a negative value if $a is less than $b, 0 if they are equal, and a positive value if $a is greater than $b.
+     */
+    private static function usort_HM_address(array $a, array $b): int
     {
         $result = strcasecmp($a['HM_address'], $b['HM_address']);
 
         $a_adr = explode(':', $a['HM_address']);
         $b_adr = explode(':', $b['HM_address']);
         if (count($a_adr) === 2 && count($b_adr) === 2 && strcasecmp($a_adr[0], $b_adr[0]) === 0) {
-            $result = (int)$a_adr[1] > $b_adr[1];
+            $result = (int)($a_adr[1] > $b_adr[1]);
         }
 
         return $result;
     }
 
-    /** @noinspection PhpUnusedPrivateMethodInspection */
-    private static function usort_IPS_dev_name(array $a, array $b)
+    private static function usort_IPS_dev_name(array $a, array $b): int
     {
         if (($result = strcasecmp($a['IPS_name'], $b['IPS_name'])) === 0) {
             $result = self::usort_HM_address($a, $b);
@@ -860,7 +1032,7 @@ class HMInventoryReportCreator extends IPSModule
         return $result;
     }
 
-    private static function usort_HM_device_adr(array $a, array $b)
+    private static function usort_HM_device_adr(array $a, array $b): int
     {
         if (($result = strcasecmp($a['HM_device'], $b['HM_device'])) === 0) {
             $result = self::usort_HM_address($a, $b);
@@ -869,7 +1041,7 @@ class HMInventoryReportCreator extends IPSModule
         return $result;
     }
 
-    private static function usort_HM_devtype(array $a, array $b)
+    private static function usort_HM_devtype(array $a, array $b): int
     {
         if (($result = strcasecmp($a['HM_devtype'], $b['HM_devtype'])) === 0) {
             $result = self::usort_HM_address($a, $b);
@@ -878,7 +1050,7 @@ class HMInventoryReportCreator extends IPSModule
         return $result;
     }
 
-    private static function usort_HM_devname(array $a, array $b)
+    private static function usort_HM_devname(array $a, array $b): int
     {
         if (($result = strcasecmp($a['HM_devname'], $b['HM_devname'])) === 0) {
             $result = self::usort_HM_address($a, $b);
@@ -887,14 +1059,14 @@ class HMInventoryReportCreator extends IPSModule
         return $result;
     }
 
-    private function GetHMChannelName($HMAddress, $HMDeviceAddress)
+    private function getHMChannelName($HMAddress, $HMDeviceAddress): string
     {
         $HMScript = 'Name = (xmlrpc.GetObjectByHSSAddress(interfaces.GetAt(0), "' . $HMDeviceAddress . '")).Name();' . PHP_EOL;
 
-        $ScriptReturn = $this->SendScript($HMAddress, $HMScript);
-        $HMChannelName = json_decode($ScriptReturn, true)['Name'];
+        $ScriptReturn  = $this->SendScript($HMAddress, $HMScript);
+        $HMChannelName = json_decode($ScriptReturn, true, 512, JSON_THROW_ON_ERROR)['Name'];
 
-        if (!is_string($HMChannelName)){ //Wenn der ChannelName auf HM Seite leer ist, dann kommt ein leeres Array zurück
+        if (!is_string($HMChannelName)) { //Wenn der ChannelName auf HM Seite leer ist, dann kommt ein leeres Array zurück
             $HMChannelName = '';
         }
 
@@ -902,71 +1074,112 @@ class HMInventoryReportCreator extends IPSModule
         return $HMChannelName;
     }
 
-    private function SendScript($HMAddress, $Script)
+    private function SendScript($HMAddress, $Script): false|string
     {
         $url = 'Script.exe';
 
         try {
             $HMScriptResult = $this->LoadHMScript($HMAddress, $url, $Script);
-            $xml            = @new SimpleXMLElement(utf8_encode($HMScriptResult), LIBXML_NOBLANKS + LIBXML_NONET);
+            $xml            = @new SimpleXMLElement(mb_convert_encoding($HMScriptResult, 'UTF-8', 'ISO-8859-1'), LIBXML_NOBLANKS + LIBXML_NONET);
         } catch (Exception $exc) {
             trigger_error($exc->getMessage());
         }
         if (isset($xml)) {
             unset($xml->exec, $xml->sessionId, $xml->httpUserAgent);
-            return json_encode($xml);
+            return json_encode($xml, JSON_THROW_ON_ERROR);
         }
 
         return false;
     }
 
-    private function LoadHMScript($HMAddress, $url, $HMScript)
+
+    /**
+     * Sets up a cURL handler for making requests to the specified HM address.
+     *
+     * @param string $HMAddress The CCU address.
+     * @param string $url       The URL to send the request to.
+     * @param string $HMScript  The payload to send with the request.
+     *
+     * @return resource|false The cURL handler, or false if the CCU address is not set.
+     * @throws \JsonException
+     */
+    private function setupCurlHandler(string $HMAddress, string $url, string $HMScript): CurlHandle|false
     {
-        if ($HMAddress !== '') {
-            $header[] = 'Accept: text/plain,text/xml,application/xml,application/xhtml+xml,text/html';
-            $header[] = 'Cache-Control: max-age=0';
-            $header[] = 'Connection: close';
-            $header[] = 'Accept-Charset: UTF-8';
-            $header[] = 'Content-type: text/plain;charset="UTF-8"';
+        $ParentId     = @IPS_GetInstance($this->InstanceID)['ConnectionID'];
+        $ParentConfig = json_decode(IPS_GetConfiguration($ParentId), true, 512, JSON_THROW_ON_ERROR);
+        $scheme       = $ParentConfig['UseSSL'] ? 'https' : 'http';
+        $port         = $ParentConfig['UseSSL'] ? $ParentConfig['HSSSLPort'] : $ParentConfig['HSPort'];
 
-            $ParentId     = @IPS_GetInstance($this->InstanceID)['ConnectionID'];
-            $ParentConfig = json_decode(IPS_GetConfiguration($ParentId), true);
+        $ch = curl_init(sprintf('%s://%s:%s/%s', $scheme, $HMAddress, $port, $url));
 
-            if ($ParentConfig['UseSSL']) {
-                $ch = curl_init(sprintf('https://%s:%s/%s', $HMAddress, $ParentConfig['HSSSLPort'], $url));
-                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-                curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-            } else {
-                $ch = curl_init(sprintf('http://%s:%s/%s', $HMAddress, $ParentConfig['HSPort'], $url));
-            }
-            curl_setopt($ch, CURLOPT_HEADER, false);
-            curl_setopt($ch, CURLOPT_FAILONERROR, true);
-            curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, $HMScript);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, $header);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, ['Expect:']);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT_MS, 1000);
-            curl_setopt($ch, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
-            curl_setopt($ch, CURLOPT_TIMEOUT_MS, 5000);
+        $header[] = 'Accept: text/plain,text/xml,application/xml,application/xhtml+xml,text/html';
+        $header[] = 'Cache-Control: max-age=0';
+        $header[] = 'Connection: close';
+        $header[] = 'Accept-Charset: UTF-8';
+        $header[] = 'Content-type: text/plain;charset="UTF-8"';
+        $header[] = 'Expect:';
 
-            if ($ParentConfig['Password'] !== '') {
-                curl_setopt($ch, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
-                curl_setopt($ch, CURLOPT_USERPWD, $ParentConfig['Username'] . ':' . $ParentConfig['Password']);
-            }
-
-            $result = curl_exec($ch);
-            $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-
-            curl_close($ch);
-
-            if (($result === false) || ($http_code >= 400)) {
-                trigger_error('CCU unreachable', E_USER_ERROR);
-            }
-            return $result;
+        if ($ParentConfig['UseSSL']) {
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
         }
 
-        trigger_error('CCU Address not set.');
-        return false;
+        curl_setopt($ch, CURLOPT_HEADER, false);
+        curl_setopt($ch, CURLOPT_FAILONERROR, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $HMScript);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $header);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT_MS, 1000);
+        curl_setopt($ch, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+        curl_setopt($ch, CURLOPT_TIMEOUT_MS, 5000);
+
+        if ($ParentConfig['Password'] !== '') {
+            curl_setopt($ch, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
+            curl_setopt($ch, CURLOPT_USERPWD, $ParentConfig['Username'] . ':' . $ParentConfig['Password']);
+        }
+
+        return $ch;
+    }
+
+    /**
+     * Loads an HM script from a given HM address using cURL.
+     *
+     * @param string $HMAddress The CCU address.
+     * @param string $url       The URL of the HM script to load.
+     * @param string $HMScript  The HM script to load.
+     *
+     * @return bool|string The result of the cURL execution, or false if the CCU address is not set.
+     * @throws \InvalidArgumentException
+     * @throws \JsonException
+     * @throws \RuntimeException
+     */
+    private function LoadHMScript(string $HMAddress, string $url, string $HMScript): bool|string
+    {
+        if ($HMAddress === '') {
+            throw new InvalidArgumentException('CCU Address not set.');
+        }
+        $ch     = $this->setupCurlHandler($HMAddress, $url, $HMScript);
+        $result = curl_exec($ch);
+        $this->handleCurlError($ch, $result);
+        curl_close($ch);
+        return $result;
+    }
+
+    /**
+     * Handles CURL errors and throws a RuntimeException if the request fails or if the HTTP response code is greater than or equal to 400.
+     *
+     * @param \CurlHandle $ch     The CURL handle.
+     * @param mixed       $result The result of the CURL request.
+     *
+     * @return void
+     * @throws \RuntimeException If the CURL request fails or if the HTTP response code is greater than or equal to 400.
+     */
+    private function handleCurlError(CurlHandle $ch, false|string $result): void
+    {
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        if (($result === false) || ($http_code >= 400)) {
+            throw new RuntimeException('CCU unreachable');
+        }
     }
 }
