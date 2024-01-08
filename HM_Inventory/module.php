@@ -540,13 +540,13 @@ class HMInventoryReportCreator extends IPSModule
         }
         $HTML_ifcs .= '</table></td></tr>';
 
-        $HTML_sep = "<tr><td colspan=3><table style='width: 100%; text-align: left'> <hr><tr><td> </td></tr></table></td></tr>";
+        $HTML_sep = '<tr><td colspan=3><table style="width: 100%; text-align: left"> <hr><tr><td> </td></tr></table></td></tr>';
 
-        $dthdr_td_b   = "<td style='font-size: small; color: #EEEEEE'><b>";
-        $dthdr_td_b_r = "<td style='text-align: right; font-size: small; color: #EEEEEE'><b>";
+        $dthdr_td_b   = '<td style="font-size: small; color: #EEEEEE"><b>';
+        $dthdr_td_b_r = '<td style="text-align: right; font-size: small; color: #EEEEEE"><b>';
         $dthdr_td_e   = '</b></td>';
         $dthdr_td_eb  = $dthdr_td_e . $dthdr_td_b;
-        $HTML_dvcs    = "<tr><td colspan=3><table style='width: 100%; text-align: left'>";
+        $HTML_dvcs    = '<tr><td colspan=3><table style="width: 100%; text-align: left">';
         $HTML_dvcs    .= '<tr bgcolor=' . self::BG_COLOR_HEADLINE . '>';
         $HTML_dvcs    .= $dthdr_td_b_r . '&nbsp##&nbsp' . $dthdr_td_eb . 'IPS ID' . $dthdr_td_eb . 'IPS device name&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp'
                          . $dthdr_td_eb . 'HM address' . $dthdr_td_e;
@@ -555,10 +555,10 @@ class HMInventoryReportCreator extends IPSModule
         }
         $HTML_dvcs .= $dthdr_td_b . 'HM device type' . $dthdr_td_eb . 'Fw.' . $dthdr_td_eb . 'HM channel type' . $dthdr_td_eb . 'Dir.' . $dthdr_td_eb
                       . 'AES' . $dthdr_td_e;
-        $HTML_dvcs .= "<td style='width: 2%; text-align: center; color: #EEEEEE; font-size: medium'>Roa- ming</td>";
+        $HTML_dvcs .= '<td style="width: 2%; text-align: center; color: #EEEEEE; font-size: medium">Roa- ming</td>';
         foreach ($hm_BidCos_Ifc_list as $hm_ifce) {
             if ($hm_ifce['CONNECTED']) {
-                $HTML_dvcs .= "<td style='width: 6%; text-align: center; color: #EEEEEE; font-size: small'>" . $hm_ifce['ADDRESS']
+                $HTML_dvcs .= '<td style="width: 6%; text-align: center; color: #EEEEEE; font-size: small">' . $hm_ifce['ADDRESS']
                               . ' tx/rx&nbsp(db&micro;V)' . '</td>';
             }
         }
@@ -574,10 +574,10 @@ class HMInventoryReportCreator extends IPSModule
                 $same_device     = false;
                 $previous_hm_adr = $hm_adr[0];
             }
-            $font_tag      = "<font size='2' color=" . (($HM_dev['IPS_HM_d_assgnd'] === false) ? '#DDDDDD' : '#FFAAAA') . '>';
+            $font_tag      = '<font size="2" color=' . (($HM_dev['IPS_HM_d_assgnd'] === false) ? '#DDDDDD' : '#FFAAAA') . '>';
             $dtdvc_td_b    = '<td>' . $font_tag;
-            $dtdvc_td_ar_b = "<td style='text-align: right'>" . $font_tag;
-            $dtdvc_td_ac_b = "<td style='text-align: center'>" . $font_tag;
+            $dtdvc_td_ar_b = '<td style="text-align: right">' . $font_tag;
+            $dtdvc_td_ac_b = '<td style="text-align: center">' . $font_tag;
             $dtdvc_td_e    = '</font></td>';
             $dtdvc_td_eb   = $dtdvc_td_e . $dtdvc_td_b;
             if (($entry_no++ % 2) === 0) {
@@ -612,26 +612,26 @@ class HMInventoryReportCreator extends IPSModule
                             }
                             if ($lciValue[3]) {
                                 if (($HM_dev['HM_Roaming'] === '+') || $lciValue[2]) {
-                                    $lvl_strg_color = '<#DDDD66>';
+                                    $lvl_strg_color = '<p style="color: #DDDD66">';
                                 } else {
-                                    $lvl_strg_color = '<#FFFF88>';
+                                    $lvl_strg_color = '<p style="color: #FFFF88">';
                                 }
                             } else {
-                                $lvl_strg_color = '<#DDDDDD>';
+                                $lvl_strg_color = '<p style="color: =#DDDDDD">';
                             }
 
                             [$rx_strg, $tx_strg] = $this->getRxTxLevelString($lciValue[0], $lciValue[1]);
 
                             if (($HM_dev['HM_Roaming'] === '+') || $lciValue[2]) {
                                 $lvl_strg = sprintf(
-                                    '%s<ins>%s &#047 %s</ins></font>',
+                                    '%s<ins>%s &#047 %s</ins></p>',
                                     $lvl_strg_color,
                                     $rx_strg,
                                     $tx_strg
                                 );
                             } else {
                                 $lvl_strg = sprintf(
-                                    '%s%s &#047 %s</font>',
+                                    '%s%s &#047 %s</p>',
                                     $lvl_strg_color,
                                     $rx_strg,
                                     $tx_strg
@@ -651,16 +651,16 @@ class HMInventoryReportCreator extends IPSModule
         }
 
         if ($HM_module_num === 0) {
-            $HTML_dvcs .= "<tr><td colspan=20 style='text-align: center; color: #DDDDDD; font-size: large'><br/>No HomeMatic devices found!</td></tr>";
+            $HTML_dvcs .= '<tr><td colspan=20 style="text-align: center; color: #DDDDDD; font-size: large"><br/>No HomeMatic devices found!</td></tr>';
         }
 
         $HTML_dvcs .= '</td></tr>';
 
         // Some comments
         //
-        $HTML_notes = "<tr><td colspan=20><table style='width: 100%; text-align: left; color: #666666'><hr><tr><td> </td></tr></table></td></tr>";
-        $HTML_notes .= "<tr><td colspan=20><table style='width: 100%; text-align: left; font-size:medium; color: #DDDDDD'><tr><td>Notes:</td></tr>";
-        $HTML_notes .= "<tr><td style='font-size: smaller; color: #DDDDDD'><ol>";
+        $HTML_notes = '<tr><td colspan=20><table style="width: 100%; text-align: left; color: #666666"><hr><tr><td> </td></tr></table></td></tr>';
+        $HTML_notes .= '<tr><td colspan=20><table style="width: 100%; text-align: left; font-size:medium; color: #DDDDDD"><tr><td>Notes:</td></tr>';
+        $HTML_notes .= '<tr><td style="font-size: smaller; color: #DDDDDD"><ol>';
 
         $notes = [
             'Interfaces: bold letters indicate the default BidCos-Interface.',
