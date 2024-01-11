@@ -15,11 +15,7 @@ class HMInventoryReportCreator extends IPSModule
     private const ERROR_MSG    = "Can't get any device information from the BidCoS-%s-Service";
 
     // Some color options for the HTML output
-    private const BG_COLOR_GLOBAL         = '#181818';         // Global background color
     private const BG_COLOR_INTERFACE_LIST = '#223344';         // Background color for the interface list
-    private const BG_COLOR_HEADLINE       = '#334455';         // Background color for the header line of the device list
-    private const BG_COLOR_ODDLINE        = '#181818';         // Background color for the odd lines of the device list
-    private const BG_COLOR_EVENLINE       = '#1A2B3C';         // Background color for the even lines of the device list
     private const INVALID_LEVEL           = 65536;
 
     //property names
@@ -175,6 +171,7 @@ class HMInventoryReportCreator extends IPSModule
         $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter++);
 
         foreach (IPS_GetInstanceListByModuleID('{EE4A81C6-5C90-4DB7-AD2F-F6BBD521412E}') as $id) {
+        //foreach ([10020, 10004, 40073] as $id) { //zum Testen mit wenigen Devices
             //first check if the device is assigned to the right gateway
             if ($ParentId !== IPS_GetInstance($id)['ConnectionID']) {
                 continue;
@@ -511,7 +508,7 @@ class HMInventoryReportCreator extends IPSModule
 
         $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter);
 
-        $HTML_intro = "<table width='100%' border='0' align='center' bgcolor=" . self::BG_COLOR_GLOBAL . '>';
+        $HTML_intro = "<table class='table-align-left Background-color'>";
 
         $HM_inventory_str = sprintf('<b>HM Inventory (%s) </b><b>&nbsp found at %s</b>', $moduleVersion, date('d.m.Y H:i:s'));
         $HM_interface_str = sprintf(
@@ -540,14 +537,14 @@ class HMInventoryReportCreator extends IPSModule
         }
         $HTML_ifcs .= '</table></td></tr>';
 
-        $HTML_sep = '<tr><td colspan=3><table style="width: 100%; text-align: left"> <hr><tr><td> </td></tr></table></td></tr>';
+        $HTML_sep = '<tr><td colspan=3><table class="table-align-left" ><tr><td> </td></tr></table></td></tr>';
 
         $dthdr_td_b   = '<td style="font-size: small; color: #EEEEEE"><b>';
         $dthdr_td_b_r = '<td style="text-align: right; font-size: small; color: #EEEEEE"><b>';
         $dthdr_td_e   = '</b></td>';
         $dthdr_td_eb  = $dthdr_td_e . $dthdr_td_b;
-        $HTML_dvcs    = '<tr><td colspan=3><table style="width: 100%; text-align: left">';
-        $HTML_dvcs    .= '<tr bgcolor=' . self::BG_COLOR_HEADLINE . '>';
+        $HTML_dvcs    = '<tr><td colspan=3><table class="table-align-left">';
+        $HTML_dvcs    .= '<tr class="bgcolor-header-devices">';
         $HTML_dvcs    .= $dthdr_td_b_r . '&nbsp##&nbsp' . $dthdr_td_eb . 'IPS ID' . $dthdr_td_eb . 'IPS device name&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp'
                          . $dthdr_td_eb . 'HM address' . $dthdr_td_e;
         if ($this->ReadPropertyBoolean('ShowHMConfiguratorDeviceNames')) {
@@ -574,18 +571,16 @@ class HMInventoryReportCreator extends IPSModule
                 $same_device     = false;
                 $previous_hm_adr = $hm_adr[0];
             }
-            $font_tag      = '<font size="2" color=' . (($HM_dev['IPS_HM_d_assgnd'] === false) ? '#DDDDDD' : '#FFAAAA') . '>';
-            $dtdvc_td_b    = '<td>' . $font_tag;
-            $dtdvc_td_ar_b = '<td style="text-align: right">' . $font_tag;
-            $dtdvc_td_ac_b = '<td style="text-align: center">' . $font_tag;
-            $dtdvc_td_e    = '</font></td>';
+            $td_color      = ($HM_dev['IPS_HM_d_assgnd'] === false) ? 'gray-text' : 'pale-red-text';
+
+            $dtdvc_td_b    = '<td class="'. $td_color . '">';
+            $dtdvc_td_ar_b    = '<td class="'. $td_color . ' text-right">';
+            $dtdvc_td_ac_b    = '<td class="'. $td_color . ' text-center">';
+            $dtdvc_td_e    = '</td>';
             $dtdvc_td_eb   = $dtdvc_td_e . $dtdvc_td_b;
-            if (($entry_no++ % 2) === 0) {
-                $r_bgcolor = self::BG_COLOR_ODDLINE;
-            } else {
-                $r_bgcolor = self::BG_COLOR_EVENLINE;
-            }
-            $HTML_dvcs .= '<tr bgcolor=' . $r_bgcolor . '>' . $dtdvc_td_ar_b . $entry_no . '&nbsp&nbsp' . $dtdvc_td_eb;
+
+            $tr_class = (($entry_no++ % 2) === 0) ? 'bg_color_oddline' : 'bg_color_evenline';
+            $HTML_dvcs .= '<tr class="' . $tr_class . '">' . $dtdvc_td_ar_b . $entry_no . '&nbsp&nbsp' . $dtdvc_td_eb;
             $HTML_dvcs .= $HM_dev['IPS_id'] . $dtdvc_td_eb . mb_convert_encoding($HM_dev['IPS_name'], 'ISO-8859-1', 'UTF-8') . $dtdvc_td_eb
                           . $HM_dev['HM_address'] . $dtdvc_td_eb;
             if ($this->ReadPropertyBoolean('ShowHMConfiguratorDeviceNames')) {
@@ -601,14 +596,14 @@ class HMInventoryReportCreator extends IPSModule
 
             if (!$same_device) {
                 $HTML_dvcs .= $HM_dev['HM_Roaming'] . $dtdvc_td_e;
-                //print_r($HM_dev);
 
                 if (isset($HM_dev['HM_levels'])) {
-                    foreach ($HM_dev['HM_levels'] as $lci => $lciValue) {
+                    for ($lci = 0; $lci < $HM_interface_connected_num; $lci++){
                         if (isset($HM_dev['HM_levels'][$lci])) {
+                            $lciValue = $HM_dev['HM_levels'][$lci];
                             // Interface with best levels gets different color
                             if (!isset($lciValue[3])) {
-                                echo $HM_dev['HM_device'] . PHP_EOL;
+                                trigger_error("HM_levels[$lci][3] not set", E_USER_ERROR);
                             }
                             if ($lciValue[3]) {
                                 if (($HM_dev['HM_Roaming'] === '+') || $lciValue[2]) {
@@ -617,9 +612,8 @@ class HMInventoryReportCreator extends IPSModule
                                     $lvl_strg_color = '<p style="color: #FFFF88">';
                                 }
                             } else {
-                                $lvl_strg_color = '<p style="color: =#DDDDDD">';
+                                $lvl_strg_color = '<p style="color: #DDDDDD">';
                             }
-
                             [$rx_strg, $tx_strg] = $this->getRxTxLevelString($lciValue[0], $lciValue[1]);
 
                             if (($HM_dev['HM_Roaming'] === '+') || $lciValue[2]) {
@@ -640,25 +634,27 @@ class HMInventoryReportCreator extends IPSModule
 
                             $HTML_dvcs .= $dtdvc_td_ac_b . $lvl_strg . $dtdvc_td_e;
                         } else {
-                            $HTML_dvcs .= '<td> </td>';
+                            $HTML_dvcs .= '<td></td>';
                         }
                     }
+                } else {
+                    $HTML_dvcs .= $dtdvc_td_e . str_repeat('<td></td>', $HM_interface_connected_num);
                 }
             } else {
-                $HTML_dvcs .= $dtdvc_td_e . '<td> </td>';
-                $HTML_dvcs .= str_repeat('<td> </td>', $HM_interface_connected_num);
+                $HTML_dvcs .= $dtdvc_td_e . str_repeat('<td></td>', $HM_interface_connected_num);
             }
+            $HTML_dvcs .= '</tr>';
         }
 
         if ($HM_module_num === 0) {
             $HTML_dvcs .= '<tr><td colspan=20 style="text-align: center; color: #DDDDDD; font-size: large"><br/>No HomeMatic devices found!</td></tr>';
         }
 
-        $HTML_dvcs .= '</td></tr>';
+        $HTML_dvcs .= '</table></td></tr>';
 
         // Some comments
         //
-        $HTML_notes = '<tr><td colspan=20><table style="width: 100%; text-align: left; color: #666666"><hr><tr><td> </td></tr></table></td></tr>';
+        $HTML_notes = '<tr><td colspan=20><table style="width: 100%; text-align: left; color: #666666"><tr><td> </td></tr></table></td></tr>';
         $HTML_notes .= '<tr><td colspan=20><table style="width: 100%; text-align: left; font-size:medium; color: #DDDDDD"><tr><td>Notes:</td></tr>';
         $HTML_notes .= '<tr><td style="font-size: smaller; color: #DDDDDD"><ol>';
 
@@ -773,9 +769,55 @@ class HMInventoryReportCreator extends IPSModule
         return <<<HEREDOC
 <html lang="">
 <head>
-  <style>
-    html,body {font-family:Arial,Helvetica,sans-serif;font-size:12px;background-color:#000000;color:#dddddd;}
-  </style><title></title>
+    <style>
+        html, body {
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 12px;
+            background-color: #000000;
+            color: #dddddd;
+        }
+        
+        .table-align-left {
+            width: 100%;
+            text-align: left;
+        }
+        
+        .Background-color {
+            background-color: #223344;
+        }
+        
+        .bgcolor-header-devices {
+            background-color: #334455;
+        }
+        
+        .bg_color_oddline {
+            background-color: #181818;
+            font-size: 0.8em;
+        }
+
+        .bg_color_evenline {
+            background-color: #1A2B3C;
+            font-size: 0.8em;
+        }
+
+        .text-right {
+            text-align: right;
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        .gray-text {
+            color: #DDDDDD;
+        }        
+
+        .pale-red-text {
+            color: #FFAAAA;
+        }        
+
+    </style>
+    <title></title>
 </head>
 <body>
   $HTML_intro
