@@ -171,7 +171,7 @@ class HMInventoryReportCreator extends IPSModule
         $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter++);
 
         foreach (IPS_GetInstanceListByModuleID('{EE4A81C6-5C90-4DB7-AD2F-F6BBD521412E}') as $id) {
-        //foreach ([10020, 10004, 40073] as $id) { //zum Testen mit wenigen Devices
+            //foreach ([10020, 10004, 40073] as $id) { //zum Testen mit wenigen Devices
             //first check if the device is assigned to the right gateway
             if ($ParentId !== IPS_GetInstance($id)['ConnectionID']) {
                 continue;
@@ -521,7 +521,7 @@ class HMInventoryReportCreator extends IPSModule
         );
         $IPS_instance_str = sprintf('%s IPS instances (connected to %s HM channels)', $IPS_device_num, $IPS_HM_channel_num);
 
-        $HTML_ifcs = "<tr style='vertical-align: top'>";
+        $HTML_ifcs = "<tr style='vertical-align: top'> <!-- Interfacezeile -->" . PHP_EOL;
         $HTML_ifcs .= "<td><table style='text-align: left;font-size: large; color: #99AABB'>";
         $HTML_ifcs .= $this->generateTableRow('large', '#99AABB', $HM_inventory_str);
         $HTML_ifcs .= $this->generateTableRow('small', '#CCCCCC', $HM_interface_str);
@@ -535,15 +535,29 @@ class HMInventoryReportCreator extends IPSModule
         foreach ($hm_BidCos_Ifc_list as $hm_ifce) {
             $HTML_ifcs .= $this->formatInterfaceRow($hm_ifce);
         }
-        $HTML_ifcs .= '</table></td></tr>';
+        $HTML_ifcs .= '</table></td></tr><!-- Ende Interfacezeile -->' . PHP_EOL;
 
-        $HTML_sep = '<tr><td colspan=3><table class="table-align-left" ><tr><td> </td></tr></table></td></tr>';
+        $HTML_sep = <<<HEREDOC
+    <tr><!-- Separatorzeile -->
+        <td colspan=3>
+            <table class="table-align-left">
+                <tr>
+                    <td></td>
+                </tr>
+            </table>
+        </td>
+    </tr><!-- Ende Separatorzeile -->
+
+HEREDOC;
 
         $dthdr_td_b   = '<td style="font-size: small; color: #EEEEEE"><b>';
         $dthdr_td_b_r = '<td style="text-align: right; font-size: small; color: #EEEEEE"><b>';
         $dthdr_td_e   = '</b></td>';
         $dthdr_td_eb  = $dthdr_td_e . $dthdr_td_b;
-        $HTML_dvcs    = '<tr><td colspan=3><table class="table-align-left">';
+
+        $HTML_dvcs    = '<tr><!-- Gerätezeile -->' . PHP_EOL;
+
+        $HTML_dvcs    .= '<td colspan=3><table class="table-align-left">';
         $HTML_dvcs    .= '<tr class="bgcolor-header-devices">';
         $HTML_dvcs    .= $dthdr_td_b_r . '&nbsp##&nbsp' . $dthdr_td_eb . 'IPS ID' . $dthdr_td_eb . 'IPS device name&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp'
                          . $dthdr_td_eb . 'HM address' . $dthdr_td_e;
@@ -559,7 +573,7 @@ class HMInventoryReportCreator extends IPSModule
                               . ' tx/rx&nbsp(db&micro;V)' . '</td>';
             }
         }
-        $HTML_dvcs .= '</tr>';
+        $HTML_dvcs .= '</tr>' . PHP_EOL;
 
         $entry_no        = 0;
         $previous_hm_adr = '';
@@ -571,20 +585,19 @@ class HMInventoryReportCreator extends IPSModule
                 $same_device     = false;
                 $previous_hm_adr = $hm_adr[0];
             }
-            $td_color      = ($HM_dev['IPS_HM_d_assgnd'] === false) ? 'gray-text' : 'pale-red-text';
+            $td_color = ($HM_dev['IPS_HM_d_assgnd'] === false) ? 'gray-text' : 'pale-red-text';
 
-            $dtdvc_td_b    = '<td class="'. $td_color . '">';
-            $dtdvc_td_ar_b    = '<td class="'. $td_color . ' text-right">';
-            $dtdvc_td_ac_b    = '<td class="'. $td_color . ' text-center">';
+            $dtdvc_td_b    = '<td class="' . $td_color . '">';
+            $dtdvc_td_ar_b = '<td class="' . $td_color . ' text-right">';
+            $dtdvc_td_ac_b = '<td class="' . $td_color . ' text-center">';
             $dtdvc_td_e    = '</td>';
             $dtdvc_td_eb   = $dtdvc_td_e . $dtdvc_td_b;
 
-            $tr_class = (($entry_no++ % 2) === 0) ? 'bg_color_oddline' : 'bg_color_evenline';
+            $tr_class  = (($entry_no++ % 2) === 0) ? 'bg_color_oddline' : 'bg_color_evenline';
             $HTML_dvcs .= '<tr class="' . $tr_class . '">' . $dtdvc_td_ar_b . $entry_no . '&nbsp&nbsp' . $dtdvc_td_eb;
-            $HTML_dvcs .= $HM_dev['IPS_id'] . $dtdvc_td_eb . mb_convert_encoding($HM_dev['IPS_name'], 'ISO-8859-1', 'UTF-8') . $dtdvc_td_eb
-                          . $HM_dev['HM_address'] . $dtdvc_td_eb;
+            $HTML_dvcs .= $HM_dev['IPS_id'] . $dtdvc_td_eb . $HM_dev['IPS_name'] . $dtdvc_td_eb . $HM_dev['HM_address'] . $dtdvc_td_eb;
             if ($this->ReadPropertyBoolean('ShowHMConfiguratorDeviceNames')) {
-                $HTML_dvcs .= mb_convert_encoding($HM_dev['HM_devname'], 'ISO-8859-1', 'UTF-8') . $dtdvc_td_eb;
+                $HTML_dvcs .= $HM_dev['HM_devname'] . $dtdvc_td_eb;
             }
             if (!$same_device) {
                 $HTML_dvcs .= $HM_dev['HM_device'] . $dtdvc_td_eb . $HM_dev['HM_FWversion'] . $dtdvc_td_eb;
@@ -598,7 +611,7 @@ class HMInventoryReportCreator extends IPSModule
                 $HTML_dvcs .= $HM_dev['HM_Roaming'] . $dtdvc_td_e;
 
                 if (isset($HM_dev['HM_levels'])) {
-                    for ($lci = 0; $lci < $HM_interface_connected_num; $lci++){
+                    for ($lci = 0; $lci < $HM_interface_connected_num; $lci++) {
                         if (isset($HM_dev['HM_levels'][$lci])) {
                             $lciValue = $HM_dev['HM_levels'][$lci];
                             // Interface with best levels gets different color
@@ -638,39 +651,52 @@ class HMInventoryReportCreator extends IPSModule
                         }
                     }
                 } else {
-                    $HTML_dvcs .= $dtdvc_td_e . str_repeat('<td></td>', $HM_interface_connected_num);
+                    $HTML_dvcs .= str_repeat('<td></td>', $HM_interface_connected_num);
                 }
             } else {
                 $HTML_dvcs .= $dtdvc_td_e . str_repeat('<td></td>', $HM_interface_connected_num);
             }
-            $HTML_dvcs .= '</tr>';
+            $HTML_dvcs .= '</tr>' . PHP_EOL;
         }
 
         if ($HM_module_num === 0) {
-            $HTML_dvcs .= '<tr><td colspan=20 style="text-align: center; color: #DDDDDD; font-size: large"><br/>No HomeMatic devices found!</td></tr>';
+            $HTML_dvcs .= '<tr><td colspan=20 style="text-align: center; color: #DDDDDD; font-size: large"><br/>No HomeMatic devices found!</td></tr>'
+                          . PHP_EOL;
         }
 
-        $HTML_dvcs .= '</table></td></tr>';
+        $HTML_dvcs .= '</table></td></tr> <!-- Ende Gerätezeile -->' . PHP_EOL;
 
         // Some comments
         //
-        $HTML_notes = '<tr><td colspan=20><table style="width: 100%; text-align: left; color: #666666"><tr><td> </td></tr></table></td></tr>';
-        $HTML_notes .= '<tr><td colspan=20><table style="width: 100%; text-align: left; font-size:medium; color: #DDDDDD"><tr><td>Notes:</td></tr>';
-        $HTML_notes .= '<tr><td style="font-size: smaller; color: #DDDDDD"><ol>';
 
-        $notes = [
-            'Interfaces: bold letters indicate the default BidCos-Interface.',
-            'Level-pairs: the left value is showing the last signal level received by the device from the interface, while the right value is showing the last signal level received by the interface from the device.',
-            'Level-pairs: underlined letters of the level-pair indicate the BidCos-Interface associated with the device (or all interfaces when Roaming is enabled for the device).',
-            'Level-pairs: the yellow level-pair indicates the BidCos-Interface with best signal quality.',
-            'Devices without level-pairs haven\'t sent/received anything since last start of the BidCos-service or are wired.',
-            'BidCos channels assigned to more than one IPS-device are shown in red.'
-        ];
-        foreach ($notes as $note) {
-            $HTML_notes .= $this->createHtmlElement($note, 'li');
-        }
-        $HTML_notes .= '</ol></td></tr>';
-        $HTML_notes .= '</table></td></tr>';
+        $HTML_notes = <<<HEREDOC
+    <tr><!-- Notes Überschriftenzeile-->
+        <td>
+            <table style="width: 100%; text-align: left; font-size:medium; color: #DDDDDD">
+                <tr>
+                    <td>Notes:</td>
+                </tr>
+                <tr>
+                    <td style="font-size: smaller; color: #DDDDDD">
+                        <ol>
+                            <li>Interfaces: bold letters indicate the default BidCos-Interface.</li>
+                            <li>Level-pairs: the left value is showing the last signal level received by the device from the interface, while the
+                                right value is showing the last signal level received by the interface from the device.
+                            </li>
+                            <li>Level-pairs: underlined letters of the level-pair indicate the BidCos-Interface associated with the device (or all
+                                interfaces when Roaming is enabled for the device).
+                            </li>
+                            <li>Level-pairs: the yellow level-pair indicates the BidCos-Interface with best signal quality.</li>
+                            <li>Devices without level-pairs haven't sent/received anything since last start of the BidCos-service or are wired.</li>
+                            <li>BidCos channels assigned to more than one IPS-device are shown in red.</li>
+                        </ol>
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr><!-- Ende Notes Überschriftenzeile-->
+
+HEREDOC;
 
         $HTML_end = '</table>';
 
@@ -713,10 +739,6 @@ class HMInventoryReportCreator extends IPSModule
         return ['FIRMWARE' => $HM_FWversion, 'INTERFACE' => $HM_Interface, 'ROAMING' => $HM_Roaming];
     }
 
-    private function createHtmlElement($content, $containerTag, $props = ''): string
-    {
-        return "<$containerTag $props>$content</$containerTag>";
-    }
 
     private function generateTableRow($fontSize, $color, $content): string
     {
@@ -735,7 +757,7 @@ class HMInventoryReportCreator extends IPSModule
                 <td style='font-size: small;color: #EEEEEE'>{$italicStart}Interface: $interfaceInfo&nbsp{$italicEnd}</td>
                 <td style='font-size: small;color: #EEEEEE'>{$italicStart}{$hm_ifce['DESCRIPTION']}{$italicEnd}</td>
                 <td style='font-size: small;color: #EEEEEE'>{$italicStart}{$connectionStatus}{$italicEnd}</td>
-            </tr>";
+            </tr>" . PHP_EOL;
     }
 
     private function getRxTxLevelString($rx_lvl, $tx_lvl): array
@@ -819,11 +841,14 @@ class HMInventoryReportCreator extends IPSModule
     </style>
     <title></title>
 </head>
+
 <body>
   $HTML_intro
-  <tr>
-    <td colspan=3><table style='width: 100%; text-align: left; background-color: #112233'><tr><td><h1>HM inventory</h1></td></tr></table></td>
-  </tr>
+  
+  <tr> <!-- Überschriftenzeile -->
+    <td colspan=3><table style='width: 100%; text-align: left; background-color: #112233'><tr><td><h1>HM Inventory</h1></td></tr></table></td>
+  </tr> <!-- Ende Überschriftenzeile -->
+  
   $HTML_ifcs
   $HTML_sep
   $HTML_dvcs
