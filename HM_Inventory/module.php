@@ -9,21 +9,27 @@ include_once __DIR__ . '/../libs/phpxmlrpc-4.3.0/lib/xmlrpc.inc';
 // Klassendefinition
 
 /** @noinspection AutoloadingIssuesInspection */
-class HMInventoryReportCreator extends IPSModule
+class HMInventoryReportCreator extends IPSModuleStrict
 {
-    private const SERVICETYPES = ['RF', 'IP', 'WR'];
-    private const ERROR_MSG    = "Can't get any device information from the BidCoS-%s-Service";
+    private const array  SERVICETYPES = ['RF', 'IP', 'WR'];
+    private const string ERROR_MSG    = "Can't get any device information from the BidCoS-%s-Service";
 
     // Some color options for the HTML output
-    private const BG_COLOR_INTERFACE_LIST = '#223344';         // Background color for the interface list
-    private const INVALID_LEVEL           = 65536;
+    private const string BG_COLOR_INTERFACE_LIST = '#223344';         // Background color for the interface list
+    private const int    INVALID_LEVEL           = 65536;
 
     //property names
-    private const PROP_ACTIVE                   = 'active';
-    private const PROP_OUTPUTFILE               = 'OutputFile';
-    private const PROP_SHOWMAINTENANCEENTRIES   = 'ShowMaintenanceEntries';
-    private const PROP_SHOWVIRTUALKEYENTRIES    = 'ShowVirtualKeyEntries';
-    private const PROP_SAVEDEVICELISTINVARIABLE = 'SaveDeviceListInVariable';
+    private const string PROP_ACTIVE                   = 'active';
+    private const string PROP_OUTPUTFILE               = 'OutputFile';
+    private const string PROP_SHOWMAINTENANCEENTRIES   = 'ShowMaintenanceEntries';
+    private const string PROP_SHOWVIRTUALKEYENTRIES    = 'ShowVirtualKeyEntries';
+    private const string PROP_SAVEDEVICELISTINVARIABLE = 'SaveDeviceListInVariable';
+    private const string PROP_SORTORDER                 = 'SortOrder';
+    private const string PROP_SHOWLONGIPSDEVICENAMES    = 'ShowLongIPSDeviceNames';
+    private const string PROP_SHOWHMCONFIGURATORDEVICENAMES = 'ShowHMConfiguratorDeviceNames';
+    private const string PROP_SHOWNOTUSEDCHANNELS       = 'ShowNotUsedChannels';
+    private const string PROP_UPDATEINTERVAL            = 'UpdateInterval';
+
 
     // Überschreibt die interne IPS_Create($id) Funktion
     public function Create(): void
@@ -44,7 +50,7 @@ class HMInventoryReportCreator extends IPSModule
         //Never delete this line!
         parent::ApplyChanges();
 
-        //Set receive filter to something that will never match
+        //Set a receive filter to something that will never match
         $this->SetReceiveDataFilter(
             'Dieser Filter sollte niemals greifen, daher ist er etwas länger :-'
         ); //es werden keine Nachrichten vom verbundenen Socket verarbeitet
@@ -53,7 +59,7 @@ class HMInventoryReportCreator extends IPSModule
             return;
         }
 
-        $this->SetTimerInterval('Update', $this->ReadPropertyInteger('UpdateInterval') * 60 * 1000);
+        $this->SetTimerInterval('Update', $this->ReadPropertyInteger(self::PROP_UPDATEINTERVAL) * 60 * 1000);
 
         $this->RegisterVariables();
 
@@ -62,7 +68,7 @@ class HMInventoryReportCreator extends IPSModule
         $this->SetSummary($this->ReadPropertyString(self::PROP_OUTPUTFILE));
     }
 
-    public function MessageSink($TimeStamp, $SenderID, $Message, $Data): void
+    public function MessageSink(int $TimeStamp, int $SenderID, int $Message, array $Data): void
     {
         parent::MessageSink($TimeStamp, $SenderID, $Message, $Data);
 
@@ -71,86 +77,136 @@ class HMInventoryReportCreator extends IPSModule
         }
     }
 
-    public function ReceiveData($JSONString): bool
+    public function ReceiveData(string $JSONString): string
     {
         trigger_error(sprintf('Fatal error: no ReceiveData expected. (%s)', $JSONString));
 
-        return parent::ReceiveData($JSONString);
+        return '';
     }
 
 
     /**
-     * Die folgenden Funktionen stehen automatisch zur Verfügung, wenn das Modul über die "Module Control" eingefügt wurden.
-     * Die Funktionen werden, mit dem selbst eingerichteten Prefix, in PHP und JSON-RPC wie folgt zur Verfügung gestellt:.
+     * Erstellt den HM Inventory Report und speichert ihn als HTML-Datei.
+     *
+     * Ursprünglich entwickelt von Andreas Bahrdt (HM-Inventory), Public Domain.
+     * Quellen: http://www.ip-symcon.de/forum/99682-post76.html
+     *          https://www.symcon.de/forum/threads/17633-HM_Inventory
+     *
+     * Historie:
+     * - 27.10.2011: Anpassung für IPS v2.5 (Raketenschnecke)
+     * - 16.03.2016: Anpassung für IPS v4.0 (bumaas)
+     * - 18.01.2017: Erweiterung für HM-IP und HM-Wired (bumaas)
+     *
+     * @return bool True bei Erfolg, false falls der Report nicht erstellt werden konnte.
+     * @throws \JsonException
+     * @throws \JsonException
      */
     public function CreateReport(): bool
     {
-        // originally written by Andreas Bahrdt (HM-Inventory)
-        //
-        // Public domain
-        //
-        // Quellen:     http://www.ip-symcon.de/forum/99682-post76.html
-        //              https://www.symcon.de/forum/threads/17633-HM_Inventory
-
-        // Anpassung für IPS v 2.5 27.10.2011 by Raketenschnecke
-        // Anpassung für IPS v 4.0 16.03.2016 by bumaas
-        // Erweiterung für HM-IP und HM-Wired 18.01.2017 by bumaas
-
-        // Get the required data from the BidCos-Services (RF, IP, Wired)
-
-        $ParentId = $this->fetchParentId();
-        if (!$this->isGatewayActive($ParentId)) {
-            return false;
-        }
-
-        $ParentConfig  = json_decode(IPS_GetConfiguration($ParentId), true, 512, JSON_THROW_ON_ERROR);
-        $moduleVersion = $this->getModuleVersion();
-
-        $IP_adr_Homematic = IPS_GetProperty($ParentId, 'Host');
-
-        [$BidCos_RF_Service_adr, $BidCos_IP_Service_adr] = $this->formatServiceAddresses($ParentConfig, $IP_adr_Homematic);
-
-        [$hm_dev_list, $dev_counter, $err] = $this->getDeviceLists($ParentId, $ParentConfig);
-        if (count($hm_dev_list) === 0) {
-            trigger_error("Can't get any device information from the BidCos-Services (Error: $err)", E_USER_ERROR);
-        }
-
-
-        //print_r($hm_dev_list);
-        //print_r($dev_counter);
 
         $this->progressBarInit();
         $progressBarCounter = 0;
 
+        $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter++); // Schritt 1
 
-        // get all BidCos Interfaces
-        $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter++);
-
-        $xml_rtnmsg = $this->SendRequestMessage(
-            'listBidcosInterfaces',
-            [],
-            $BidCos_RF_Service_adr,
-            $ParentConfig['UseSSL'],
-            $ParentConfig['Password'],
-            $ParentConfig['Username']
-        );
-
-        if ($xml_rtnmsg->errno === 0) {
-            $hm_BidCos_Ifc_list = php_xmlrpc_decode($xml_rtnmsg->value());
-            $this->SendDebug('received (BidCos_Ifc_list):', json_encode($hm_BidCos_Ifc_list, JSON_THROW_ON_ERROR), 0);
-            //nach 'DEFAULT' sortieren, damit die CCU an erster Stelle steht.
-            $default = array_column($hm_BidCos_Ifc_list, 'DEFAULT');
-            array_multisort($default, SORT_DESC, $hm_BidCos_Ifc_list);
-            //print_r($hm_BidCos_Ifc_list);
-        } else {
-            $this->SendDebug('Error', "Can't get HM-interface information from the BidCos-RF-Service", 0);
-            die("Fatal error: Can't get HM-interface information from the BidCos-Service ($BidCos_RF_Service_adr) - ($xml_rtnmsg->errstr");
+        $reportData = $this->collectDeviceData($progressBarCounter);
+        if ($reportData === null) {
+            return false;
         }
 
-        $HM_interface_num           = 0;
-        $HM_interface_connected_num = 0;
-        $HM_default_interface_no    = 0;
+        // Wenn gewünscht, die sortierte Liste in die Variable schreiben
+        if ($this->ReadPropertyBoolean(self::PROP_SAVEDEVICELISTINVARIABLE)) {
+            $this->SetValue('DeviceList', json_encode($reportData['HM_array'], JSON_THROW_ON_ERROR));
+        }
 
+        // Generate HTML output code
+        $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter++); // Schritt 6
+
+        // Header-Daten vorbereiten
+        $headerHtml = $this->renderHeaderSection($reportData);
+
+        // Interface-Liste
+        $interfacesHtml = $this->renderInterfacesSection($reportData['hm_BidCos_Ifc_list']);
+
+        // Geräte-Liste
+        $devicesHtml = $this->renderDevicesSection($reportData);
+
+        $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter++); // Schritt 7
+
+        $notesHtml = $this->renderNotesSection();
+
+
+
+        // Output the results
+        $outputFileName = $this->ReadPropertyString(self::PROP_OUTPUTFILE);
+        if ($outputFileName) {
+            $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter++); // Schritt 8
+
+            $htmlContent = $this->getHtmlContent(
+                $headerHtml,
+                $interfacesHtml,
+                $this->renderSeparator(),
+                $devicesHtml,
+                $notesHtml,
+                '</table>'
+            );
+
+            if (@file_put_contents($outputFileName, $htmlContent) === false) {
+                echo sprintf('File "%s" not writable!' . PHP_EOL, $outputFileName);
+                return false;
+            }
+
+            $this->UpdateFormField('ProgressBar', 'current', 9); // Finaler Schritt 9
+            IPS_Sleep(200);
+            $this->UpdateFormField('ProgressBar', 'visible', false);
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Sammelt alle benötigten Daten für den Report.
+     *
+     * @param int &$progressBarCounter Referenz auf den globalen Fortschrittszähler
+     *
+     * @return array|null
+     * @throws \JsonException
+     * @throws \JsonException
+     */
+    private function collectDeviceData(int &$progressBarCounter): ?array
+    {
+        $ParentId = $this->fetchParentId();
+        if (!$this->isGatewayActive($ParentId)) {
+            return null;
+        }
+
+        $ParentConfig = json_decode(IPS_GetConfiguration($ParentId), true, 512, JSON_THROW_ON_ERROR);
+        $IP_adr_Homematic = IPS_GetProperty($ParentId, 'Host');
+        [$BidCos_RF_Service_adr, $BidCos_IP_Service_adr] = $this->formatServiceAddresses($ParentConfig, $IP_adr_Homematic);
+
+        [$hm_dev_list, $dev_counter, $err] = $this->getDeviceLists($ParentId, $ParentConfig);
+        if (count($hm_dev_list) === 0) {
+            trigger_error("Can't get any device information from the BidCos-Services (Error: $err)");
+            return null;
+        }
+
+        // 1. BidCos Interfaces
+        $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter++);  // Schritt 1
+        $xml_rtnmsg = $this->SendRequestMessage('listBidcosInterfaces', [], $BidCos_RF_Service_adr, $ParentConfig['UseSSL'], $ParentConfig['Password'], $ParentConfig['Username']);
+
+        if ($xml_rtnmsg->errno !== 0) {
+            $this->SendDebug('Error', "Can't get HM-interface information from the BidCos-RF-Service", 0);
+            return null;
+        }
+
+        $hm_BidCos_Ifc_list = php_xmlrpc_decode($xml_rtnmsg->value());
+        $default = array_column($hm_BidCos_Ifc_list, 'DEFAULT');
+        array_multisort($default, SORT_DESC, $hm_BidCos_Ifc_list);
+
+        $HM_interface_num = 0;
+        $HM_interface_connected_num = 0;
+        $HM_default_interface_no = 0;
         foreach ($hm_BidCos_Ifc_list as $key => $hm_ifce) {
             $HM_interface_num++;
             if ($hm_ifce['CONNECTED']) {
@@ -161,123 +217,84 @@ class HMInventoryReportCreator extends IPSModule
             }
         }
 
-        $IPS_device_num     = 0; //Anzahl der IPS Instanzen
-        $IPS_HM_channel_num = 0; //Anzahl der verbundenen HM Kanälen (berücksichtigt Mehrfacheinbindungen)
-        $HM_module_num      = 0;
-        $HM_array           = [];
+        $IPS_device_num = 0;
+        $IPS_HM_channel_num = 0;
+        $HM_module_num = 0;
+        $HM_array = [];
 
-        // Fill array with all HM-devices found in IP-Symcon
-        //
-        $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter++);
-
+        // 2. Fill HM_array with devices found in IP-Symcon
+        $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter++);  // Schritt 2
         foreach (IPS_GetInstanceListByModuleID('{EE4A81C6-5C90-4DB7-AD2F-F6BBD521412E}') as $id) {
-            //foreach ([10020, 10004, 40073] as $id) { //zum Testen mit wenigen Devices
-            //first check if the device is assigned to the right gateway
             if ($ParentId !== IPS_GetInstance($id)['ConnectionID']) {
                 continue;
             }
             $HM_module_num++;
             $IPS_device_num++;
             $IPS_HM_channel_already_assigned = false;
-            $HM_address                      = IPS_GetProperty($id, 'Address');
-            $this->SendDebug('hm_device', 'ID: ' . $id . ', Address: ' . $HM_address, 0);
+            $HM_address = IPS_GetProperty($id, 'Address');
 
             $NeedlePos = strpos($HM_address, ':');
-            if ($NeedlePos) {
-                $HM_Par_address = substr($HM_address, 0, $NeedlePos);
-            } else {
-                echo 'HM address (' . $HM_address . ') of id ' . $id . ' is invalid.' . PHP_EOL;
+            if (!$NeedlePos) {
                 continue;
             }
-            $HM_device     = '-';
-            $HM_devname    = '-';
-            $HM_FWversion  = ' ';
-            $HM_Interface  = '';
-            $HM_Roaming    = ' ';
-            $HM_devtype    = '-';
-            $HM_direction  = '-';
-            $HM_AES_active = '-';
-            $hm_chld_dev   = null;
-            $hm_par_dev    = null;
+            $HM_Par_address = substr($HM_address, 0, $NeedlePos);
+
+            $HM_device = '-'; $HM_devname = '-'; $HM_FWversion = ' '; $HM_Interface = '';
+            $HM_Roaming = ' '; $HM_devtype = '-'; $HM_direction = '-'; $HM_AES_active = '-';
+            $hm_chld_dev = null; $hm_par_dev = null;
 
             foreach ($hm_dev_list as $hm_dev) {
-                if ($hm_dev['ADDRESS'] === $HM_address) {
-                    $hm_chld_dev = $hm_dev;
-                }
-                if ($hm_dev['ADDRESS'] === $HM_Par_address) {
-                    $hm_par_dev = $hm_dev;
-                }
+                match ($hm_dev['ADDRESS']) {
+                    $HM_address     => $hm_chld_dev = $hm_dev,
+                    $HM_Par_address => $hm_par_dev = $hm_dev,
+                    default         => null
+                };
+
                 if ($hm_chld_dev !== null) {
-                    if (isset($hm_dev['PARENT_TYPE'])) {
-                        $HM_device = $hm_dev['PARENT_TYPE'];
-                    }
-                    if ($this->ReadPropertyBoolean('ShowHMConfiguratorDeviceNames')) {
+                    if (isset($hm_dev['PARENT_TYPE'])) $HM_device = $hm_dev['PARENT_TYPE'];
+                    if ($this->ReadPropertyBoolean(self::PROP_SHOWHMCONFIGURATORDEVICENAMES)) {
                         $HM_devname = $this->getHMChannelName($IP_adr_Homematic, $hm_dev['ADDRESS']);
                     }
-
                     $device_info = $this->extractDeviceInfo($hm_par_dev);
-
                     $HM_FWversion = $device_info['FIRMWARE'];
                     $HM_Interface = $device_info['INTERFACE'];
                     $HM_Roaming   = $device_info['ROAMING'];
-
                     $HM_devtype = $hm_dev['TYPE'];
                     if (isset($hm_dev['DIRECTION'])) {
-                        if ($hm_dev['DIRECTION'] === 1) {
-                            $HM_direction = 'TX';
-                        } elseif ($hm_dev['DIRECTION'] === 2) {
-                            $HM_direction = 'RX';
-                        }
+                        if ($hm_dev['DIRECTION'] === 1) $HM_direction = 'TX';
+                        elseif ($hm_dev['DIRECTION'] === 2) $HM_direction = 'RX';
                     }
-                    if (isset($hm_dev['AES_ACTIVE']) && ($hm_dev['AES_ACTIVE'] !== 0)) {
-                        $HM_AES_active = '+';
-                    }
+                    if (isset($hm_dev['AES_ACTIVE']) && ($hm_dev['AES_ACTIVE'] !== 0)) $HM_AES_active = '+';
                     break;
                 }
             }
 
             if ($HM_address !== '') {
-                foreach ($HM_array as &$HM_dev) {
-                    if ($HM_dev['HM_address'] === $HM_address) {
-                        $HM_dev['IPS_HM_d_assgnd']       = true;
+                foreach ($HM_array as &$HM_dev_ref) {
+                    if ($HM_dev_ref['HM_address'] === $HM_address) {
+                        $HM_dev_ref['IPS_HM_d_assgnd'] = true;
                         $IPS_HM_channel_already_assigned = true;
                         break;
                     }
                 }
-                unset($HM_dev);
-                if (!$IPS_HM_channel_already_assigned) {
-                    $IPS_HM_channel_num++;
-                }
+                unset($HM_dev_ref);
+                if (!$IPS_HM_channel_already_assigned) $IPS_HM_channel_num++;
             }
 
-            if ($this->ReadPropertyBoolean('ShowLongIPSDeviceNames')) {
-                $IPS_name = IPS_GetLocation($id);
-            } else {
-                $IPS_name = IPS_GetName($id);
-            }
+            $IPS_name = $this->ReadPropertyBoolean(self::PROP_SHOWLONGIPSDEVICENAMES) ? IPS_GetLocation($id) : IPS_GetName($id);
 
             $HM_array[] = [
-                'IPS_occ'         => $HM_module_num,
-                'IPS_id'          => $id,
-                'IPS_name'        => $IPS_name,
-                'IPS_HM_d_assgnd' => $IPS_HM_channel_already_assigned,
-                'HM_address'      => $HM_address,
-                'HM_device'       => $HM_device,
-                'HM_devname'      => $HM_devname,
-                'HM_FWversion'    => $HM_FWversion,
-                'HM_devtype'      => $HM_devtype,
-                'HM_direction'    => $HM_direction,
-                'HM_AES_active'   => $HM_AES_active,
-                'HM_Interface'    => $HM_Interface,
-                'HM_Roaming'      => $HM_Roaming
+                'IPS_occ' => $HM_module_num, 'IPS_id' => $id, 'IPS_name' => $IPS_name,
+                'IPS_HM_d_assgnd' => $IPS_HM_channel_already_assigned, 'HM_address' => $HM_address,
+                'HM_device' => $HM_device, 'HM_devname' => $HM_devname, 'HM_FWversion' => $HM_FWversion,
+                'HM_devtype' => $HM_devtype, 'HM_direction' => $HM_direction, 'HM_AES_active' => $HM_AES_active,
+                'HM_Interface' => $HM_Interface, 'HM_Roaming' => $HM_Roaming
             ];
         }
 
-        // Add HM_devices known by BidCos but not present in IP-Symcon
-        //
-        $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter++);
-
-        if ($this->ReadPropertyBoolean('ShowNotUsedChannels')) {
+        // 3. Add devices not in Symcon (optional)
+        $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter++);  // Schritt 3
+        if ($this->ReadPropertyBoolean(self::PROP_SHOWNOTUSEDCHANNELS)) {
             foreach ($hm_dev_list as $hm_dev) {
                 $HM_address      = $hm_dev['ADDRESS'];
                 $hm_dev_in_array = false;
@@ -349,376 +366,268 @@ class HMInventoryReportCreator extends IPSModule
             }
         }
 
-        // Request tx/rx RF-levels from BidCos-RF-Service
-        //
-        $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter++);
+        // 4. RSSI Levels (RF & IP)
+        $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter++);  // Schritt 4
+        // Hole RSSI Infos vom RF Service
+        $xml_rtnmsg = $this->SendRequestMessage('rssiInfo', [], $BidCos_RF_Service_adr, $ParentConfig['UseSSL'], $ParentConfig['Password'], $ParentConfig['Username']);
+        $hm_rssi_list = ($xml_rtnmsg->errno === 0) ? php_xmlrpc_decode($xml_rtnmsg->value()) : [];
 
-        $xml_rtnmsg = $this->SendRequestMessage(
-            'rssiInfo',
-            [],
-            $BidCos_RF_Service_adr,
-            $ParentConfig['UseSSL'],
-            $ParentConfig['Password'],
-            $ParentConfig['Username']
-        );
-
-        $hm_lvl_list = [];
-        if ($xml_rtnmsg->errno === 0) {
-            $hm_lvl_list = php_xmlrpc_decode($xml_rtnmsg->value());
-            //print_r($hm_lvl_list);
-        } else {
-            echo "Warning: Can't get RF-level information from the BidCos-Service ($BidCos_RF_Service_adr) &nbsp&nbsp&nbsp - &nbsp&nbsp&nbsp ($xml_rtnmsg->errstr)<br>\n";
-        }
-
-        // Add tx/rx RF-levels for each device/interface
-        //
-        $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter++);
-
-        if (is_array($hm_lvl_list)) {
-            foreach ($HM_array as &$HM_dev) {
-                $hm_adr = explode(':', $HM_dev['HM_address']);
-                if (isset($hm_adr[0]) && array_key_exists($hm_adr[0], $hm_lvl_list)) {
-                    $HM_lvl_array  = [];
-                    $hm_levels     = $hm_lvl_list[$hm_adr[0]];
-                    $best_lvl_ifce = -1;
-                    $ifce_no       = 0;
-                    foreach ($hm_BidCos_Ifc_list as $hm_ifce) {
-                        if ($hm_ifce['CONNECTED']) {
-                            if (array_key_exists($hm_ifce['ADDRESS'], $hm_levels)) {
-                                $HM_lvl_array[] = [
-                                    $hm_levels[$hm_ifce['ADDRESS']][0],
-                                    $hm_levels[$hm_ifce['ADDRESS']][1],
-                                    $HM_dev['HM_Interface'] === $hm_ifce['ADDRESS'],
-                                    false
-                                ];
-                                if ($hm_levels[$hm_ifce['ADDRESS']][1] !== self::INVALID_LEVEL) {
-                                    if ($best_lvl_ifce === -1) {
-                                        $best_lvl_ifce = $ifce_no;
-                                    } elseif ($HM_lvl_array[$best_lvl_ifce][1] < $hm_levels[$hm_ifce['ADDRESS']][1]) {
-                                        $best_lvl_ifce = $ifce_no;
-                                    }
-                                }
-                            } else {
-                                $HM_lvl_array[] = [self::INVALID_LEVEL, self::INVALID_LEVEL, false, false];
-                            }
-                            $ifce_no++;
-                        }
-                    }
-                    if ($best_lvl_ifce !== -1) {
-                        $best_lvl = $HM_lvl_array[$best_lvl_ifce][1];
-                        foreach ($HM_lvl_array as &$hm_lvl) {
-                            $hm_lvl[3] = ($hm_lvl[1] === $best_lvl);
-                        }
-                        unset($hm_lvl);
-                    }
-                    $HM_dev['HM_levels'] = $HM_lvl_array;
-                }
-            }
-            unset($HM_dev);
-        }
-
-        // Request tx/rx RF-levels from BidCos-IP-Service
-        //
-        $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter++);
-
-        usort($HM_array, self::usort_HM_address(...));
-
-        $previous_hm_adr    = '';
-        $previous_hm_levels = [];
         foreach ($HM_array as &$HM_dev) {
             $hm_adr = explode(':', $HM_dev['HM_address']);
-            if (isset($hm_adr[0]) && strlen($hm_adr[0]) !== 14) {
-                $previous_hm_adr = '';
-                continue;
-            }
-            if ($hm_adr[0] !== $previous_hm_adr) {
-                $params     = [
-                    new xmlrpcval($hm_adr[0] . ':0', 'string'),
-                    new xmlrpcval('VALUES', 'string')
-                ];
-                $xml_rtnmsg = $this->SendRequestMessage(
-                    'getParamset',
-                    $params,
-                    $BidCos_IP_Service_adr,
-                    $ParentConfig['UseSSL'],
-                    $ParentConfig['Password'],
-                    $ParentConfig['Username']
-                );
 
-                if ($xml_rtnmsg->errno === 0) {
-                    $HM_ParamSet = php_xmlrpc_decode($xml_rtnmsg->value());
-                    //print_r($HM_ParamSet);
-                    $HM_dev['HM_levels'][$HM_default_interface_no][0] = $HM_ParamSet['RSSI_PEER'] ?? self::INVALID_LEVEL;
-                    $HM_dev['HM_levels'][$HM_default_interface_no][1] = $HM_ParamSet['RSSI_DEVICE'] ?? self::INVALID_LEVEL;
-                    $HM_dev['HM_levels'][$HM_default_interface_no][2] = false; //??
-                    $HM_dev['HM_levels'][$HM_default_interface_no][3] = false; //best level
+            // Nur für das Hauptgerät (Kanal 0 oder ohne Kanal) RSSI suchen
+            if (isset($hm_rssi_list[$hm_adr[0]])) {
+                $HM_dev['HM_levels'] = [];
+                foreach ($hm_BidCos_Ifc_list as $ifc) {
+                    if (!$ifc['CONNECTED']) continue;
 
-                    $previous_hm_levels = $HM_dev['HM_levels'];
+                    $adr = $ifc['ADDRESS'];
+                    if (isset($hm_rssi_list[$hm_adr[0]][$adr])) {
+                        // Speichere RX, TX, IsAssociated, IsBest
+                        $HM_dev['HM_levels'][] = [
+                            $hm_rssi_list[$hm_adr[0]][$adr][0], // RX
+                            $hm_rssi_list[$hm_adr[0]][$adr][1], // TX
+                            ($HM_dev['HM_Interface'] === $adr), // IsAssociated
+                            false // IsBest (wird unten berechnet)
+                        ];
+                    }
                 }
-            } else {
-                $HM_dev['HM_levels'] = $previous_hm_levels;
+
+                // Bestes Interface markieren
+                if (count($HM_dev['HM_levels']) > 0) {
+                    $best_idx = 0;
+                    $max_rssi = -255;
+                    foreach ($HM_dev['HM_levels'] as $idx => $lvl) {
+                        if ($lvl[0] > $max_rssi && $lvl[0] !== self::INVALID_LEVEL) {
+                            $max_rssi = $lvl[0];
+                            $best_idx = $idx;
+                        }
+                    }
+                    $HM_dev['HM_levels'][$best_idx][3] = true;
+                }
             }
         }
         unset($HM_dev);
 
-
-        //delete the Maintenance Channels and Virtual Keys if required
-        foreach ($HM_array as $key => $HM_dev) {
-            if ($HM_dev['HM_devtype'] === 'MAINTENANCE' && !$this->ReadPropertyBoolean(self::PROP_SHOWMAINTENANCEENTRIES)) {
-                unset ($HM_array[$key]);
-            }
-
-            if ($HM_dev['HM_devtype'] === 'VIRTUAL_KEY' && !$this->ReadPropertyBoolean(self::PROP_SHOWVIRTUALKEYENTRIES)) {
-                unset ($HM_array[$key]);
-            }
-        }
-
-
-        // Sort device list
-        //
-        $SortOrder = $this->ReadPropertyInteger('SortOrder');
-        switch ($SortOrder) {
-            case 3: // by IPS-dev_name
-                usort($HM_array, self::usort_IPS_dev_name(...));
+        // Sortierung anwenden
+        $sortOrder = $this->ReadPropertyInteger(self::PROP_SORTORDER);
+        switch ($sortOrder) {
+            case 1: // HM device type
+                usort($HM_array, [self::class, 'usort_HM_devtype']);
                 break;
-            case 0: // by HM-address
-                usort($HM_array, self::usort_HM_address(...));
+            case 2: // HM channel type
+                usort($HM_array, [self::class, 'usort_HM_device_adr']);
                 break;
-            case 1: // by HM-device
-                usort($HM_array, self::usort_HM_device_adr(...));
+            case 3: // IPS device name
+                usort($HM_array, [self::class, 'usort_IPS_dev_name']);
                 break;
-            case 2: //by HM-type
-                usort($HM_array, self::usort_HM_devtype(...));
+            case 4: // HM device name
+                usort($HM_array, [self::class, 'usort_HM_devname']);
                 break;
-            case 4: //by HM-device-name
-                usort($HM_array, self::usort_HM_devname(...));
-                break;
+            case 0: // HM address
             default:
-                trigger_error('Unknown SortOrder: ' . $SortOrder);
+                usort($HM_array, [self::class, 'usort_HM_address']);
+                break;
         }
 
-        //print_r($HM_array);
+        return [
+            'dev_counter' => $dev_counter,
+            'HM_array' => $HM_array,
+            'hm_BidCos_Ifc_list' => $hm_BidCos_Ifc_list,
+            'HM_interface_num' => $HM_interface_num,
+            'HM_interface_connected_num' => $HM_interface_connected_num,
+            'IPS_device_num' => $IPS_device_num,
+            'IPS_HM_channel_num' => $IPS_HM_channel_num,
+            'HM_module_num' => $HM_module_num,
+            'HM_default_interface_no' => $HM_default_interface_no
+        ];
+    }
 
-        if ($this->ReadPropertyBoolean(self::PROP_SAVEDEVICELISTINVARIABLE)) {
-            //SetValueString($this->GetIDForIdent('DeviceList'), json_encode($HM_array));
-            $this->SetValue('DeviceList', json_encode($HM_array, JSON_THROW_ON_ERROR)); //array in String variable speichern
-        }
-
-        // Generate HTML output code
-
-        $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter);
-
-        $HTML_intro = "<table class='table-align-left Background-color'>";
-
-        $HM_inventory_str = sprintf('<b>HM Inventory (%s) </b><b>&nbsp found at %s</b>', $moduleVersion, date('d.m.Y H:i:s'));
-        $HM_interface_str = sprintf(
+    private function renderHeaderSection(array $data): string
+    {
+        $moduleVersion = $this->getModuleVersion();
+        $inventoryStr = sprintf('<b>HM Inventory (%s) </b><b>&nbsp found at %s</b>', $moduleVersion, date('d.m.Y H:i:s'));
+        $interfaceStr = sprintf(
             '%s HomeMatic interfaces (%s connected) with %s HM-RF devices, %s HM-wired devices and %s HmIP devices',
-            $HM_interface_num,
-            $HM_interface_connected_num,
-            $dev_counter['RF'],
-            $dev_counter['WR'],
-            $dev_counter['IP']
+            $data['HM_interface_num'],
+            $data['HM_interface_connected_num'],
+            $data['dev_counter']['RF'],
+            $data['dev_counter']['WR'],
+            $data['dev_counter']['IP']
         );
-        $IPS_instance_str = sprintf('%s IPS instances (connected to %s HM channels)', $IPS_device_num, $IPS_HM_channel_num);
+        $instanceStr = sprintf('%s IPS instances (connected to %s HM channels)', $data['IPS_device_num'], $data['IPS_HM_channel_num']);
 
-        $HTML_ifcs = "<tr style='vertical-align: top'> <!-- Interfacezeile -->" . PHP_EOL;
-        $HTML_ifcs .= "<td><table style='text-align: left;font-size: large; color: #99AABB'>";
-        $HTML_ifcs .= $this->generateTableRow('large', '#99AABB', $HM_inventory_str);
-        $HTML_ifcs .= $this->generateTableRow('small', '#CCCCCC', $HM_interface_str);
-        $HTML_ifcs .= $this->generateTableRow('small', '#CCCCCC', $IPS_instance_str);
-        $HTML_ifcs .= '</table></td>';
-        $HTML_ifcs .= "<td style='vertical-align: top'>&nbsp;</td>";
-        $HTML_ifcs .= "<td style='width: 40%; vertical-align: bottom;'><table style='width: 100%; text-align: right; background-color: "
-                      . self::BG_COLOR_INTERFACE_LIST . '\'>';
+        $html = "<table class='table-align-left Background-color'>";
+        $html .= "<tr style='vertical-align: top'><td><table style='text-align: left; font-size: large; color: #99AABB'>";
+        $html .= $this->generateTableRow('large', '#99AABB', $inventoryStr);
+        $html .= $this->generateTableRow('small', '#CCCCCC', $interfaceStr);
+        $html .= $this->generateTableRow('small', '#CCCCCC', $instanceStr);
+        $html .= '</table></td>';
+        return $html;
+    }
 
-        //print_r($hm_BidCos_Ifc_list);
-        foreach ($hm_BidCos_Ifc_list as $hm_ifce) {
-            $HTML_ifcs .= $this->formatInterfaceRow($hm_ifce);
+    private function renderInterfacesSection(array $interfaceList): string
+    {
+        $html = "<td style='vertical-align: top'>&nbsp;</td>";
+        $html .= "<td style='width: 40%; vertical-align: bottom;'><table style='width: 100%; text-align: right; background-color: "
+                 . self::BG_COLOR_INTERFACE_LIST . "'>";
+        foreach ($interfaceList as $ifc) {
+            $html .= $this->formatInterfaceRow($ifc);
         }
-        $HTML_ifcs .= '</table></td></tr><!-- Ende Interfacezeile -->' . PHP_EOL;
+        $html .= '</table></td></tr>';
+        return $html;
+    }
 
-        $HTML_sep = <<<HEREDOC
-    <tr><!-- Separatorzeile -->
-        <td colspan=3>
-            <table class="table-align-left">
-                <tr>
-                    <td></td>
-                </tr>
-            </table>
-        </td>
-    </tr><!-- Ende Separatorzeile -->
+    private function renderDevicesSection(array $data): string
+    {
+        $html = '<tr><td colspan=3><table class="table-align-left">';
+        $html .= '<tr class="bgcolor-header-devices">';
 
-HEREDOC;
-
-        $dthdr_td_b   = '<td style="font-size: small; color: #EEEEEE"><b>';
+        // Header-Spalten
+        $dthdr_td_b = '<td style="font-size: small; color: #EEEEEE"><b>';
         $dthdr_td_b_r = '<td style="text-align: right; font-size: small; color: #EEEEEE"><b>';
-        $dthdr_td_e   = '</b></td>';
-        $dthdr_td_eb  = $dthdr_td_e . $dthdr_td_b;
+        $dthdr_td_e = '</b></td>';
+        $dthdr_td_eb = $dthdr_td_e . $dthdr_td_b;
 
-        $HTML_dvcs    = '<tr><!-- Gerätezeile -->' . PHP_EOL;
+        $html .= $dthdr_td_b_r . '&nbsp##&nbsp' . $dthdr_td_eb . 'IPS ID' . $dthdr_td_eb . 'IPS device name&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp'
+                 . $dthdr_td_eb . 'HM address' . $dthdr_td_e;
 
-        $HTML_dvcs    .= '<td colspan=3><table class="table-align-left">';
-        $HTML_dvcs    .= '<tr class="bgcolor-header-devices">';
-        $HTML_dvcs    .= $dthdr_td_b_r . '&nbsp##&nbsp' . $dthdr_td_eb . 'IPS ID' . $dthdr_td_eb . 'IPS device name&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp'
-                         . $dthdr_td_eb . 'HM address' . $dthdr_td_e;
-        if ($this->ReadPropertyBoolean('ShowHMConfiguratorDeviceNames')) {
-            $HTML_dvcs .= $dthdr_td_b . 'HM device name' . $dthdr_td_e;
+        if ($this->ReadPropertyBoolean(self::PROP_SHOWHMCONFIGURATORDEVICENAMES)) {
+            $html .= $dthdr_td_b . 'HM device name' . $dthdr_td_e;
         }
-        $HTML_dvcs .= $dthdr_td_b . 'HM device type' . $dthdr_td_eb . 'Fw.' . $dthdr_td_eb . 'HM channel type' . $dthdr_td_eb . 'Dir.' . $dthdr_td_eb
-                      . 'AES' . $dthdr_td_e;
-        $HTML_dvcs .= '<td style="width: 2%; text-align: center; color: #EEEEEE; font-size: medium">Roa- ming</td>';
-        foreach ($hm_BidCos_Ifc_list as $hm_ifce) {
+
+        $html .= $dthdr_td_b . 'HM device type' . $dthdr_td_eb . 'Fw.' . $dthdr_td_eb . 'HM channel type' . $dthdr_td_eb . 'Dir.' . $dthdr_td_eb . 'AES' . $dthdr_td_e;
+        $html .= '<td style="width: 2%; text-align: center; color: #EEEEEE; font-size: medium">Roa- ming</td>';
+
+        foreach ($data['hm_BidCos_Ifc_list'] as $hm_ifce) {
             if ($hm_ifce['CONNECTED']) {
-                $HTML_dvcs .= '<td style="width: 6%; text-align: center; color: #EEEEEE; font-size: small">' . $hm_ifce['ADDRESS']
-                              . ' tx/rx&nbsp(db&micro;V)' . '</td>';
+                $html .= '<td style="width: 6%; text-align: center; color: #EEEEEE; font-size: small">' . $hm_ifce['ADDRESS'] . ' tx/rx&nbsp(db&micro;V)</td>';
             }
         }
-        $HTML_dvcs .= '</tr>' . PHP_EOL;
+        $html .= '</tr>' . PHP_EOL;
 
-        $entry_no        = 0;
+        $entry_no = 0;
         $previous_hm_adr = '';
-        foreach ($HM_array as $HM_dev) {
+        foreach ($data['HM_array'] as $HM_dev) {
             $hm_adr = explode(':', $HM_dev['HM_address']);
-            if ($hm_adr[0] === $previous_hm_adr) {
-                $same_device = true;
-            } else {
-                $same_device     = false;
-                $previous_hm_adr = $hm_adr[0];
-            }
-            $td_color = ($HM_dev['IPS_HM_d_assgnd'] === false) ? 'gray-text' : 'pale-red-text';
+            $same_device = ($hm_adr[0] === $previous_hm_adr);
+            $previous_hm_adr = $hm_adr[0];
 
-            $dtdvc_td_b    = '<td class="' . $td_color . '">';
-            $dtdvc_td_ar_b = '<td class="' . $td_color . ' text-right">';
-            $dtdvc_td_ac_b = '<td class="' . $td_color . ' text-center">';
-            $dtdvc_td_e    = '</td>';
-            $dtdvc_td_eb   = $dtdvc_td_e . $dtdvc_td_b;
-
-            $tr_class  = (($entry_no++ % 2) === 0) ? 'bg_color_oddline' : 'bg_color_evenline';
-            $HTML_dvcs .= '<tr class="' . $tr_class . '">' . $dtdvc_td_ar_b . $entry_no . '&nbsp&nbsp' . $dtdvc_td_eb;
-            $HTML_dvcs .= $HM_dev['IPS_id'] . $dtdvc_td_eb . $HM_dev['IPS_name'] . $dtdvc_td_eb . $HM_dev['HM_address'] . $dtdvc_td_eb;
-            if ($this->ReadPropertyBoolean('ShowHMConfiguratorDeviceNames')) {
-                $HTML_dvcs .= $HM_dev['HM_devname'] . $dtdvc_td_eb;
-            }
-            if (!$same_device) {
-                $HTML_dvcs .= $HM_dev['HM_device'] . $dtdvc_td_eb . $HM_dev['HM_FWversion'] . $dtdvc_td_eb;
-            } else {
-                $HTML_dvcs .= $dtdvc_td_eb . $dtdvc_td_eb;
-            }
-            $HTML_dvcs .= $HM_dev['HM_devtype'] . $dtdvc_td_eb . $HM_dev['HM_direction'] . $dtdvc_td_e . $dtdvc_td_ac_b . $HM_dev['HM_AES_active']
-                          . $dtdvc_td_e . $dtdvc_td_ac_b;
-
-            if (!$same_device) {
-                $HTML_dvcs .= $HM_dev['HM_Roaming'] . $dtdvc_td_e;
-
-                if (isset($HM_dev['HM_levels'])) {
-                    for ($lci = 0; $lci < $HM_interface_connected_num; $lci++) {
-                        if (isset($HM_dev['HM_levels'][$lci])) {
-                            $lciValue = $HM_dev['HM_levels'][$lci];
-                            // Interface with best levels gets different color
-                            if (!isset($lciValue[3])) {
-                                trigger_error("HM_levels[$lci][3] not set", E_USER_ERROR);
-                            }
-                            if ($lciValue[3]) {
-                                if (($HM_dev['HM_Roaming'] === '+') || $lciValue[2]) {
-                                    $lvl_strg_color = '<p style="color: #DDDD66">';
-                                } else {
-                                    $lvl_strg_color = '<p style="color: #FFFF88">';
-                                }
-                            } else {
-                                $lvl_strg_color = '<p style="color: #DDDDDD">';
-                            }
-                            [$rx_strg, $tx_strg] = $this->getRxTxLevelString($lciValue[0], $lciValue[1]);
-
-                            if (($HM_dev['HM_Roaming'] === '+') || $lciValue[2]) {
-                                $lvl_strg = sprintf(
-                                    '%s<ins>%s &#047 %s</ins></p>',
-                                    $lvl_strg_color,
-                                    $rx_strg,
-                                    $tx_strg
-                                );
-                            } else {
-                                $lvl_strg = sprintf(
-                                    '%s%s &#047 %s</p>',
-                                    $lvl_strg_color,
-                                    $rx_strg,
-                                    $tx_strg
-                                );
-                            }
-
-                            $HTML_dvcs .= $dtdvc_td_ac_b . $lvl_strg . $dtdvc_td_e;
-                        } else {
-                            $HTML_dvcs .= '<td></td>';
-                        }
-                    }
-                } else {
-                    $HTML_dvcs .= str_repeat('<td></td>', $HM_interface_connected_num);
-                }
-            } else {
-                $HTML_dvcs .= $dtdvc_td_e . str_repeat('<td></td>', $HM_interface_connected_num);
-            }
-            $HTML_dvcs .= '</tr>' . PHP_EOL;
+            $html .= $this->renderDeviceRow($HM_dev, ++$entry_no, $same_device, $data['HM_interface_connected_num']);
         }
 
-        if ($HM_module_num === 0) {
-            $HTML_dvcs .= '<tr><td colspan=20 style="text-align: center; color: #DDDDDD; font-size: large"><br/>No HomeMatic devices found!</td></tr>'
-                          . PHP_EOL;
+        if ($data['HM_module_num'] === 0) {
+            $html .= '<tr><td colspan=20 style="text-align: center; color: #DDDDDD; font-size: large"><br/>No HomeMatic devices found!</td></tr>';
         }
 
-        $HTML_dvcs .= '</table></td></tr> <!-- Ende Gerätezeile -->' . PHP_EOL;
+        $html .= '</table></td></tr>';
+        return $html;
+    }
 
-        // Some comments
-        //
+    private function renderDeviceRow(array $dev, int $entryNo, bool $sameDevice, int $connectedIfcNum): string
+    {
+        $td_color = ($dev['IPS_HM_d_assgnd'] === false) ? 'gray-text' : 'pale-red-text';
+        $tr_class = (($entryNo % 2) === 1) ? 'bg_color_oddline' : 'bg_color_evenline';
 
-        $HTML_notes = <<<HEREDOC
-    <tr><!-- Notes Überschriftenzeile-->
-        <td>
-            <table style="width: 100%; text-align: left; font-size:medium; color: #DDDDDD">
-                <tr>
-                    <td>Notes:</td>
-                </tr>
-                <tr>
-                    <td style="font-size: smaller; color: #DDDDDD">
-                        <ol>
-                            <li>Interfaces: bold letters indicate the default BidCos-Interface.</li>
-                            <li>Level-pairs: the left value is showing the last signal level received by the device from the interface, while the
-                                right value is showing the last signal level received by the interface from the device.
-                            </li>
-                            <li>Level-pairs: underlined letters of the level-pair indicate the BidCos-Interface associated with the device (or all
-                                interfaces when Roaming is enabled for the device).
-                            </li>
-                            <li>Level-pairs: the yellow level-pair indicates the BidCos-Interface with best signal quality.</li>
-                            <li>Devices without level-pairs haven't sent/received anything since last start of the BidCos-service or are wired.</li>
-                            <li>BidCos channels assigned to more than one IPS-device are shown in red.</li>
-                        </ol>
-                    </td>
-                </tr>
-            </table>
-        </td>
-    </tr><!-- Ende Notes Überschriftenzeile-->
+        $html = '<tr class="' . $tr_class . '">';
+        $html .= '<td class="' . $td_color . ' text-right">' . $entryNo . '&nbsp&nbsp</td>';
+        $html .= '<td class="' . $td_color . '">' . $dev['IPS_id'] . '</td>';
+        $html .= '<td class="' . $td_color . '">' . $dev['IPS_name'] . '</td>';
+        $html .= '<td class="' . $td_color . '">' . $dev['HM_address'] . '</td>';
 
+        if ($this->ReadPropertyBoolean(self::PROP_SHOWHMCONFIGURATORDEVICENAMES)) {
+            $html .= '<td class="' . $td_color . '">' . $dev['HM_devname'] . '</td>';
+        }
+
+        if (!$sameDevice) {
+            $html .= '<td class="' . $td_color . '">' . $dev['HM_device'] . '</td>';
+            $html .= '<td class="' . $td_color . '">' . $dev['HM_FWversion'] . '</td>';
+        } else {
+            // Platzhalter für FW und Device-Typ bei Folgekanälen
+            $html .= '<td class="' . $td_color . '"></td><td class="' . $td_color . '"></td>';
+        }
+
+        $html .= '<td class="' . $td_color . '">' . $dev['HM_devtype'] . '</td>';
+        $html .= '<td class="' . $td_color . '">' . $dev['HM_direction'] . '</td>';
+        $html .= '<td class="' . $td_color . ' text-center">' . $dev['HM_AES_active'] . '</td>';
+
+        if (!$sameDevice) {
+            $html .= '<td class="' . $td_color . ' text-center">' . $dev['HM_Roaming'] . '</td>';
+            $html .= $this->renderRssiColumns($dev, $connectedIfcNum);
+        } else {
+            // WICHTIG: Auch hier müssen leere Zellen für Roaming + alle Interfaces gerendert werden
+            $html .= '<td class="' . $td_color . '"></td>';
+            $html .= str_repeat('<td></td>', $connectedIfcNum);
+        }
+
+        $html .= '</tr>' . PHP_EOL;
+        return $html;
+    }
+
+    private function renderNotesSection(): string
+    {
+        return <<<HEREDOC
+        <tr><!-- Notes Überschriftenzeile-->
+            <td colspan="3">
+                <table style="width: 100%; text-align: left; font-size:medium; color: #DDDDDD">
+                    <tr>
+                        <td>Notes:</td>
+                    </tr>
+                    <tr>
+                        <td style="font-size: smaller; color: #DDDDDD">
+                            <ol>
+                                <li>Interfaces: bold letters indicate the default BidCos-Interface.</li>
+                                <li>Level-pairs: the left value is showing the last signal level received by the device from the interface, while the
+                                    right value is showing the last signal level received by the interface from the device.
+                                </li>
+                                <li>Level-pairs: underlined letters of the level-pair indicate the BidCos-Interface associated with the device (or all
+                                    interfaces when Roaming is enabled for the device).
+                                </li>
+                                <li>Level-pairs: the yellow level-pair indicates the BidCos-Interface with best signal quality.</li>
+                                <li>Devices without level-pairs haven't sent/received anything since last start of the BidCos-service or are wired.</li>
+                                <li>BidCos channels assigned to more than one IPS-device are shown in red.</li>
+                            </ol>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr><!-- Ende Notes Überschriftenzeile-->
 HEREDOC;
+    }
 
-        $HTML_end = '</table>';
-
-        $this->UpdateFormField('ProgressBar', 'visible', false);
-
-        // Output the results
-        $OutputFileName = $this->ReadPropertyString(self::PROP_OUTPUTFILE);
-        if ($OutputFileName) {
-            $HTML_file = @fopen($OutputFileName, 'wb');
-            if ($HTML_file === false) {
-                echo sprintf('File "%s" not writable!' . PHP_EOL . PHP_EOL, $OutputFileName);
-                return false;
-            }
-
-            // Use single fwrite call
-            $htmlContent = $this->getHtmlContent($HTML_intro, $HTML_ifcs, $HTML_sep, $HTML_dvcs, $HTML_notes, $HTML_end);
-            fwrite($HTML_file, $htmlContent);
-
-            return fclose($HTML_file);
+    private function renderRssiColumns(array $dev, int $connectedIfcNum): string
+    {
+        $html = '';
+        if (!isset($dev['HM_levels'])) {
+            return str_repeat('<td></td>', $connectedIfcNum);
         }
 
-        return false;
+        for ($i = 0; $i < $connectedIfcNum; $i++) {
+            if (isset($dev['HM_levels'][$i])) {
+                $lciValue = $dev['HM_levels'][$i];
+                $isBest = (bool)($lciValue[3] ?? false);
+                $isAssociated = ($dev['HM_Roaming'] === '+') || ($lciValue[2] ?? false);
+
+                if ($isBest) {
+                    $color = $isAssociated ? '#DDDD66' : '#FFFF88';
+                } else {
+                    $color = '#DDDDDD';
+                }
+
+                [$rx, $tx] = $this->getRxTxLevelString((int)$lciValue[0], (int)$lciValue[1]);
+
+                $content = $isAssociated ? "<ins>$rx &#047 $tx</ins>" : "$rx &#047 $tx";
+                $html .= '<td class="text-center"><p style="color: ' . $color . '">' . $content . '</p></td>';
+            } else {
+                $html .= '<td></td>';
+            }
+        }
+        return $html;
+    }
+
+    private function renderSeparator(): string
+    {
+        return '<tr><td colspan=3><table class="table-align-left"><tr><td></td></tr></table></td></tr>';
     }
 
     private function extractDeviceInfo($hm_par_dev): array
@@ -760,7 +669,7 @@ HEREDOC;
             </tr>" . PHP_EOL;
     }
 
-    private function getRxTxLevelString($rx_lvl, $tx_lvl): array
+    private function getRxTxLevelString(int $rx_lvl, int $tx_lvl): array
     {
         return [
             $rx_lvl !== self::INVALID_LEVEL ? (string)$rx_lvl : '--',
@@ -1002,19 +911,14 @@ HEREDOC;
     {
         $this->RegisterPropertyBoolean(self::PROP_ACTIVE, true);
         $this->RegisterPropertyBoolean(self::PROP_SAVEDEVICELISTINVARIABLE, false);
-        $this->RegisterPropertyBoolean('SaveHMArrayInVariable', false);
-        $path = 'user' . DIRECTORY_SEPARATOR . 'HM_inventory.html';
-        if (file_exists(IPS_GetKernelDir() . 'webfront')) {
-            $path = 'webfront\\' . $path;
-        }
-        $this->RegisterPropertyString(self::PROP_OUTPUTFILE, IPS_GetKernelDir() . $path);
-        $this->RegisterPropertyInteger('SortOrder', 0);
+        $this->RegisterPropertyString(self::PROP_OUTPUTFILE, IPS_GetKernelDir() . 'user' . DIRECTORY_SEPARATOR . 'HM_inventory.html');
+        $this->RegisterPropertyInteger(self::PROP_SORTORDER, 0);
         $this->RegisterPropertyBoolean(self::PROP_SHOWVIRTUALKEYENTRIES, false);
         $this->RegisterPropertyBoolean(self::PROP_SHOWMAINTENANCEENTRIES, true);
-        $this->RegisterPropertyBoolean('ShowNotUsedChannels', true);
-        $this->RegisterPropertyBoolean('ShowLongIPSDeviceNames', false);
-        $this->RegisterPropertyBoolean('ShowHMConfiguratorDeviceNames', true);
-        $this->RegisterPropertyInteger('UpdateInterval', 0);
+        $this->RegisterPropertyBoolean(self::PROP_SHOWNOTUSEDCHANNELS, true);
+        $this->RegisterPropertyBoolean(self::PROP_SHOWLONGIPSDEVICENAMES, false);
+        $this->RegisterPropertyBoolean(self::PROP_SHOWHMCONFIGURATORDEVICENAMES, true);
+        $this->RegisterPropertyInteger(self::PROP_UPDATEINTERVAL, 0);
     }
 
     private function RegisterVariables(): void
@@ -1133,7 +1037,7 @@ HEREDOC;
         $ScriptReturn  = $this->SendScript($HMAddress, $HMScript);
         $HMChannelName = json_decode($ScriptReturn, true, 512, JSON_THROW_ON_ERROR)['Name'];
 
-        if (!is_string($HMChannelName)) { //Wenn der ChannelName auf HM Seite leer ist, dann kommt ein leeres Array zurück
+        if (!is_string($HMChannelName)) { //Wenn der ChannelName auf HM Seite leer ist, kommt ein leeres Array zurück
             $HMChannelName = '';
         }
 
@@ -1229,7 +1133,6 @@ HEREDOC;
         $ch     = $this->setupCurlHandler($HMAddress, $url, $HMScript);
         $result = curl_exec($ch);
         $this->handleCurlError($ch, $result);
-        curl_close($ch);
         return $result;
     }
 
