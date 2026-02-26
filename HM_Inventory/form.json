@@ -2,7 +2,7 @@
   "elements": [
     {"type": "Label", "caption": "This Instance creates a Report with all Homematic Devices."},
     {"type": "CheckBox", "name": "active", "caption":  "active"},
-    {"type": "Label", "caption": "The Report is created as HTML file if a file name is given"},
+    {"type": "Label", "caption": "Provide a path and file name where the report should be created (HTML is directly accessible when stored in /user)"},
     {"type": "ValidationTextBox", "name": "OutputFile", "caption": "Output File"},
     {"type": "Label", "caption": "Select the order how the device list should be sorted"},
     {
@@ -30,16 +30,34 @@
     {"type": "Label", "caption": "If the report should be created automatically select an update interval"},
     {"type": "NumberSpinner", "name": "UpdateInterval", "caption": "Update Interval", "suffix": "Minutes"}
   ],
-  "status":   [],
+  "status":   [
+    {
+      "code": 200,
+      "icon": "error",
+      "caption": "Output file is not creatable"
+    }
+  ],
   "actions":  [
     {
       "type":  "RowLayout",
       "items": [
-        {"type": "Button", "caption": "Create Report", "onClick": "$module = new IPSModule($id); if (HMI_CreateReport($id)){echo $module->Translate('Finished!');} else {echo $module->Translate('Error!');}"},
+        {"type": "Button", "caption": "Create Report", "onClick": "$module = new IPSModule($id); if (HMI_CreateReport($id)){echo $module->Translate('Report created: ') . HMI_GetOutputFileAbsolutePath($id);} else {echo $module->Translate('Error!');}"},
         {
           "type":    "ProgressBar",
           "name":    "ProgressBar",
           "width":   "200px",
+          "visible": false
+        }
+      ]
+    },
+    {
+      "type": "RowLayout",
+      "items": [
+        {
+          "type": "Button",
+          "name": "ReportLink",
+          "caption": "Open report in browser",
+          "onClick": "echo HMI_GetReportUrl($id);",
           "visible": false
         }
       ]

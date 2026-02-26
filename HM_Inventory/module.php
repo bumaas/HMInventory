@@ -63,17 +63,95 @@ class HMInventoryReportCreator extends IPSModuleStrict
 
         $this->RegisterVariables();
 
-        $this->SetInstanceStatus();
+        if (!$this->isOutputFileCreatable($this->ReadPropertyString(self::PROP_OUTPUTFILE))) {
+            $this->SetStatus(200);
+        } else {
+            $this->SetInstanceStatus();
+        }
 
         $this->SetSummary($this->ReadPropertyString(self::PROP_OUTPUTFILE));
+
+        $this->updateReportLink();
     }
 
+    public function GetOutputFileAbsolutePath(): string
+    {
+        $outputFile = $this->ReadPropertyString(self::PROP_OUTPUTFILE);
+        return $this->resolveOutputFilePath($outputFile);
+    }
+
+    private function isOutputFileCreatable(string $outputFile): bool
+    {
+        if ($outputFile === '') {
+            return false;
+        }
+
+        $resolvedPath = $this->resolveOutputFilePath($outputFile);
+        if ($resolvedPath === '') {
+            return false;
+        }
+
+        $directory = dirname($resolvedPath);
+        if (!is_dir($directory) || !is_writable($directory)) {
+            return false;
+        }
+
+        if (file_exists($resolvedPath) && !is_writable($resolvedPath)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private function isAbsolutePath(string $path): bool
+    {
+        if (preg_match('/^[A-Za-z]:[\/\\\\]/', $path) === 1) {
+            return true;
+        }
+
+        if (strpos($path, '\\\\') === 0 || strpos($path, '//') === 0) {
+            return true;
+        }
+
+        return false;
+    }
+
+    private function resolveOutputFilePath(string $outputFile): string
+    {
+        if ($outputFile === '') {
+            return '';
+        }
+
+        if ($this->isAbsolutePath($outputFile)) {
+            return $outputFile;
+        }
+
+        return IPS_GetKernelDir() . $outputFile;
+    }
+    // ... existing code ...
     public function MessageSink(int $TimeStamp, int $SenderID, int $Message, array $Data): void
     {
         parent::MessageSink($TimeStamp, $SenderID, $Message, $Data);
 
         if (($Message === IPS_KERNELMESSAGE) && ($Data[0] === KR_READY)) {
             $this->ApplyChanges();
+        }
+    }
+
+    public function GetConfigurationForm(): string
+    {
+        $this->RegisterOnceTimer('UpdateReportLink', 'IPS_RequestAction(' . $this->InstanceID . ', "UpdateReportLink", 0);');
+
+        $formPath = __DIR__ . DIRECTORY_SEPARATOR . 'form.json';
+        return file_get_contents($formPath);
+    }
+
+    public function RequestAction(string $Ident, mixed $Value): void
+    {
+        switch ($Ident) {
+            case 'UpdateReportLink':
+                $this->updateReportLink();
+                break;
         }
     }
 
@@ -159,10 +237,61 @@ class HMInventoryReportCreator extends IPSModuleStrict
             $this->UpdateFormField('ProgressBar', 'current', 9); // Finaler Schritt 9
             IPS_Sleep(200);
             $this->UpdateFormField('ProgressBar', 'visible', false);
+            $this->updateReportLink();
+
             return true;
         }
 
         return false;
+    }
+
+    public function GetReportUrl(): string
+    {
+        $outputFile = $this->ReadPropertyString(self::PROP_OUTPUTFILE);
+        return $this->buildUserReportLink($outputFile);
+    }
+
+    private function updateReportLink(): void
+    {
+        $outputFile = $this->ReadPropertyString(self::PROP_OUTPUTFILE);
+        $link = $this->GetReportUrl();
+
+        $isVisible = ($link !== '') && ($outputFile !== '') && file_exists($outputFile);
+        $this->UpdateFormField('ReportLink', 'visible', $isVisible);
+    }
+
+    private function buildUserReportLink(string $outputFile): string
+    {
+        if ($outputFile === '') {
+            return '';
+        }
+
+        $kernelDir = IPS_GetKernelDir();
+        $userDir = $kernelDir . 'user' . DIRECTORY_SEPARATOR;
+
+        $normalizedOutput = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $outputFile);
+        if (stripos($normalizedOutput, $userDir) !== 0) {
+            return '';
+        }
+
+        $relativePath = substr($normalizedOutput, strlen($userDir));
+        $relativePath = str_replace(DIRECTORY_SEPARATOR, '/', $relativePath);
+
+        $parts = array_map('rawurlencode', explode('/', $relativePath));
+        $relativeUrl = implode('/', $parts);
+
+        $networkInfo = Sys_GetNetworkInfo();
+        $serverIp = 'localhost';
+        foreach ($networkInfo as $adapter) {
+            if (!empty($adapter['IP'])) {
+                $serverIp = $adapter['IP'];
+                break;
+            }
+        }
+
+        $serverPort = '82';
+
+        return 'http://' . $serverIp . ':' . $serverPort . '/user/' . $relativeUrl;
     }
 
     /**

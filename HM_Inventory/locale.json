@@ -3,7 +3,9 @@
     "de": {
       "This Instance creates a Report with all Homematic Devices.": "Die Instanz erstellt einen Bericht mit allen Homematic Geräten.",
       "active": "aktiv",
-      "The Report is created as HTML file if a file name is given": "Der Bericht wird als HTML Datei erstellt, wenn ein Dateiname angegeben ist",
+      "Provide a path and file name where the report should be created (HTML is directly accessible when stored in /user)": "Bitte Pfad und Dateiname angeben, unter dem der Bericht erstellt werden soll (HTML ist direkt erreichbar, wenn im /user-Verzeichnis gespeichert)",
+      "Output file is not creatable": "Die angegebene Datei ist nicht erstellbar",
+      "Report created: ": "Report erstellt: ",
       "Output File": "Ausgabedatei",
       "Select the order how the device list should be sorted": "Auswahl der Sortierung, nach der die Geräte aufgelistet werden",
       "Sort Order": "Sortierung",
@@ -30,6 +32,7 @@
       "Update Interval": "Aktualisierungsintervall",
       "Minutes": "Minuten",
       "Create Report": "Erzeuge Bericht",
+      "Open report in browser": "Report im Browser öffnen",
       "Finished!": "Fertig!",
       "Error!": "Fehler!"
    }
