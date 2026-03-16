@@ -105,6 +105,10 @@ class HMInventoryReportCreator extends IPSModuleStrict
 
     private function isAbsolutePath(string $path): bool
     {
+        if (strpos($path, '/') === 0) {
+            return true;
+        }
+
         if (preg_match('/^[A-Za-z]:[\/\\\\]/', $path) === 1) {
             return true;
         }
@@ -219,6 +223,7 @@ class HMInventoryReportCreator extends IPSModuleStrict
         $outputFileName = $this->ReadPropertyString(self::PROP_OUTPUTFILE);
         if ($outputFileName) {
             $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter++); // Schritt 8
+            $resolvedOutputFileName = $this->resolveOutputFilePath($outputFileName);
 
             $htmlContent = $this->getHtmlContent(
                 $headerHtml,
@@ -229,8 +234,8 @@ class HMInventoryReportCreator extends IPSModuleStrict
                 '</table>'
             );
 
-            if (@file_put_contents($outputFileName, $htmlContent) === false) {
-                echo sprintf('File "%s" not writable!' . PHP_EOL, $outputFileName);
+            if (@file_put_contents($resolvedOutputFileName, $htmlContent) === false) {
+                echo sprintf('File "%s" not writable!' . PHP_EOL, $resolvedOutputFileName);
                 return false;
             }
 
@@ -255,8 +260,9 @@ class HMInventoryReportCreator extends IPSModuleStrict
     {
         $outputFile = $this->ReadPropertyString(self::PROP_OUTPUTFILE);
         $link = $this->GetReportUrl();
+        $resolvedPath = $this->resolveOutputFilePath($outputFile);
 
-        $isVisible = ($link !== '') && ($outputFile !== '') && file_exists($outputFile);
+        $isVisible = ($link !== '') && ($outputFile !== '') && file_exists($resolvedPath);
         $this->UpdateFormField('ReportLink', 'visible', $isVisible);
     }
 
@@ -265,11 +271,15 @@ class HMInventoryReportCreator extends IPSModuleStrict
         if ($outputFile === '') {
             return '';
         }
+        $resolvedOutputFile = $this->resolveOutputFilePath($outputFile);
+        if ($resolvedOutputFile === '') {
+            return '';
+        }
 
         $kernelDir = IPS_GetKernelDir();
         $userDir = $kernelDir . 'user' . DIRECTORY_SEPARATOR;
 
-        $normalizedOutput = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $outputFile);
+        $normalizedOutput = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $resolvedOutputFile);
         if (stripos($normalizedOutput, $userDir) !== 0) {
             return '';
         }
