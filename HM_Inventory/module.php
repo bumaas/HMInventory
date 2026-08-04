@@ -19,6 +19,10 @@ class HMInventoryReportCreator extends IPSModuleStrict
     private const string ERROR_MSG    = "Can't get any device information from the BidCoS-%s-Service";
 
     private const string GUID_HOMEMATIC_DEVICE = '{EE4A81C6-5C90-4DB7-AD2F-F6BBD521412E}';
+    private const string GUID_WEBSERVER        = '{D83E9CCF-9869-420F-8306-2B043E9BA180}';
+
+    // Port der fest eingebauten Weboberfläche (Fallback, wenn keine aktive WebServer-Instanz existiert)
+    private const int WEBINTERFACE_PORT = 3777;
 
     // Some color options for the HTML output
     private const string BG_COLOR_INTERFACE_LIST = '#223344';         // Background color for the interface list
@@ -303,9 +307,26 @@ class HMInventoryReportCreator extends IPSModuleStrict
             }
         }
 
-        $serverPort = '82';
+        [$scheme, $serverPort] = $this->getWebServerConnection();
 
-        return 'http://' . $serverIp . ':' . $serverPort . '/user/' . $relativeUrl;
+        return $scheme . '://' . $serverIp . ':' . $serverPort . '/user/' . $relativeUrl;
+    }
+
+    /**
+     * Ermittelt Schema und Port, unter dem das user-Verzeichnis erreichbar ist:
+     * die erste aktive WebServer-Instanz, sonst die fest eingebaute Weboberfläche.
+     *
+     * @return array{0: string, 1: int}
+     */
+    private function getWebServerConnection(): array
+    {
+        foreach (IPS_GetInstanceListByModuleID(self::GUID_WEBSERVER) as $instanceId) {
+            if (IPS_GetProperty($instanceId, 'Active')) {
+                $scheme = IPS_GetProperty($instanceId, 'EnableSSL') ? 'https' : 'http';
+                return [$scheme, (int)IPS_GetProperty($instanceId, 'Port')];
+            }
+        }
+        return ['http', self::WEBINTERFACE_PORT];
     }
 
     //

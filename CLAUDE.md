@@ -24,7 +24,9 @@ HomeMatic-Geräte einer CCU (BidCos-RF, HmIP, BidCos-Wired) inkl. RSSI-Werten.
   registriert mit `VARIABLE_PRESENTATION_VALUE_PRESENTATION`. Schlüsselnamen der JSON-Einträge
   (`IPS_occ`, `HM_address`, …) sind Datenkontrakt — nicht umbenennen.
 - Der Report-Link (`buildUserReportLink`) funktioniert nur für Ausgabedateien unterhalb
-  `<kernel>/user/`; Webserver-Port ist fest `82`.
+  `<kernel>/user/`; Schema/Port kommen aus der ersten aktiven WebServer-Instanz
+  (GUID `{D83E9CCF-9869-420F-8306-2B043E9BA180}`), Fallback ist die fest eingebaute
+  Weboberfläche auf Port `3777`.
 - `compareByAddress` gibt bei gleichem Geräteteil `0/1` (nie `-1`) zurück — historisches
   Verhalten, bei Refactorings beibehalten (Sortierstabilität des Reports).
 - Timer `Update` ruft `IPS_RequestAction(…, 'CreateReport', true)`; die öffentliche API
