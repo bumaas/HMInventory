@@ -14,7 +14,6 @@
       "HM channel type": "HM Kanaltyp",
       "HM device name": "HM Gerätename",
       "IPS device name": "IPS Gerätename",
-      "device number": "Gerätenummer",
       "If the complete path of the IPS instance should be shown": "Wenn der komplette Pfad der IPS Instanz ausgegeben werden soll",
       "Show long IPS Device Names": "Gebe lange IPS Gerätenamen aus",
       "If somebody is interested in the device names used in HM configurator (only device names which have been set once are shown). This parameter takes some performance.":
@@ -33,8 +32,11 @@
       "Minutes": "Minuten",
       "Create Report": "Erzeuge Bericht",
       "Open report in browser": "Report im Browser öffnen",
-      "Finished!": "Fertig!",
-      "Error!": "Fehler!"
+      "Error!": "Fehler!",
+      "Device List": "Geräteliste",
+      "Gateway is not configured!": "Es ist kein Gateway konfiguriert!",
+      "Instance is not active!": "Die Instanz ist nicht aktiv!",
+      "File \"%s\" not writable!": "Die Datei \"%s\" ist nicht schreibbar!"
    }
   }
 }

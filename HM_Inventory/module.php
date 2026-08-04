@@ -2,11 +2,15 @@
 
 declare(strict_types=1);
 
-// We need the "xmlrpc" include file
-// see https://github.com/gggeek/phpxmlrpc/releases
-include_once __DIR__ . '/../libs/phpxmlrpc-4.3.0/lib/xmlrpc.inc';
+use PhpXmlRpc\Autoloader;
+use PhpXmlRpc\Client;
+use PhpXmlRpc\Encoder;
+use PhpXmlRpc\Request;
+use PhpXmlRpc\Response;
 
-// Klassendefinition
+// see https://github.com/gggeek/phpxmlrpc (vendored: libs/phpxmlrpc, nur src/)
+require_once __DIR__ . '/../libs/phpxmlrpc/src/Autoloader.php';
+Autoloader::register();
 
 /** @noinspection AutoloadingIssuesInspection */
 class HMInventoryReportCreator extends IPSModuleStrict
@@ -14,9 +18,15 @@ class HMInventoryReportCreator extends IPSModuleStrict
     private const array  SERVICETYPES = ['RF', 'IP', 'WR'];
     private const string ERROR_MSG    = "Can't get any device information from the BidCoS-%s-Service";
 
+    private const string GUID_HOMEMATIC_DEVICE = '{EE4A81C6-5C90-4DB7-AD2F-F6BBD521412E}';
+
     // Some color options for the HTML output
     private const string BG_COLOR_INTERFACE_LIST = '#223344';         // Background color for the interface list
     private const int    INVALID_LEVEL           = 65536;
+
+    private const int STATUS_OUTPUTFILE_NOT_CREATABLE = 200;
+
+    private const int PROGRESS_BAR_MAX = 9;
 
     //property names
     private const string PROP_ACTIVE                   = 'active';
@@ -30,8 +40,10 @@ class HMInventoryReportCreator extends IPSModuleStrict
     private const string PROP_SHOWNOTUSEDCHANNELS       = 'ShowNotUsedChannels';
     private const string PROP_UPDATEINTERVAL            = 'UpdateInterval';
 
+    private const string VAR_IDENT_DEVICELIST = 'DeviceList';
 
-    // Überschreibt die interne IPS_Create($id) Funktion
+    private int $progressBarStep = 0;
+
     public function Create(): void
     {
         // Diese Zeile nicht löschen.
@@ -39,7 +51,7 @@ class HMInventoryReportCreator extends IPSModuleStrict
 
         $this->RegisterProperties();
 
-        $this->RegisterTimer('Update', 0, 'HMI_CreateReport(' . $this->InstanceID . ');');
+        $this->RegisterTimer('Update', 0, 'IPS_RequestAction(' . $this->InstanceID . ', "CreateReport", true);');
 
         //we will wait until the kernel is ready
         $this->RegisterMessage(0, IPS_KERNELMESSAGE);
@@ -64,7 +76,7 @@ class HMInventoryReportCreator extends IPSModuleStrict
         $this->RegisterVariables();
 
         if (!$this->isOutputFileCreatable($this->ReadPropertyString(self::PROP_OUTPUTFILE))) {
-            $this->SetStatus(200);
+            $this->SetStatus(self::STATUS_OUTPUTFILE_NOT_CREATABLE);
         } else {
             $this->SetInstanceStatus();
         }
@@ -74,11 +86,126 @@ class HMInventoryReportCreator extends IPSModuleStrict
         $this->updateReportLink();
     }
 
+    public function MessageSink(int $TimeStamp, int $SenderID, int $Message, array $Data): void
+    {
+        parent::MessageSink($TimeStamp, $SenderID, $Message, $Data);
+
+        if (($Message === IPS_KERNELMESSAGE) && ($Data[0] === KR_READY)) {
+            $this->ApplyChanges();
+        }
+    }
+
+    public function GetConfigurationForm(): string
+    {
+        $this->RegisterOnceTimer('UpdateReportLink', 'IPS_RequestAction(' . $this->InstanceID . ', "UpdateReportLink", 0);');
+
+        $form = file_get_contents(__DIR__ . DIRECTORY_SEPARATOR . 'form.json');
+        return $form !== false ? $form : '';
+    }
+
+    public function RequestAction(string $Ident, mixed $Value): void
+    {
+        switch ($Ident) {
+            case 'UpdateReportLink':
+                $this->updateReportLink();
+                break;
+            case 'CreateReport':
+                $this->CreateReport();
+                break;
+            default:
+                throw new InvalidArgumentException('Invalid ident: ' . $Ident);
+        }
+    }
+
+    public function ReceiveData(string $JSONString): string
+    {
+        $this->LogMessage(sprintf('Fatal error: no ReceiveData expected. (%s)', $JSONString), KL_ERROR);
+
+        return '';
+    }
+
+    /**
+     * Erstellt den HM Inventory Report und speichert ihn als HTML-Datei.
+     *
+     * Ursprünglich entwickelt von Andreas Bahrdt (HM-Inventory), Public Domain.
+     * Quellen: http://www.ip-symcon.de/forum/99682-post76.html
+     *          https://www.symcon.de/forum/threads/17633-HM_Inventory
+     *
+     * Historie:
+     * - 27.10.2011: Anpassung für IPS v2.5 (Raketenschnecke)
+     * - 16.03.2016: Anpassung für IPS v4.0 (bumaas)
+     * - 18.01.2017: Erweiterung für HM-IP und HM-Wired (bumaas)
+     *
+     * @return bool True bei Erfolg, false falls der Report nicht erstellt werden konnte.
+     * @throws \JsonException
+     */
+    public function CreateReport(): bool
+    {
+        $this->progressBarInit();
+        $this->advanceProgressBar(); // Schritt 1
+
+        $reportData = $this->collectDeviceData();
+        if ($reportData === null) {
+            $this->UpdateFormField('ProgressBar', 'visible', false);
+            return false;
+        }
+
+        // Wenn gewünscht, die sortierte Liste in die Variable schreiben
+        if ($this->ReadPropertyBoolean(self::PROP_SAVEDEVICELISTINVARIABLE)) {
+            $this->SetValue(self::VAR_IDENT_DEVICELIST, json_encode($reportData['HM_array'], JSON_THROW_ON_ERROR));
+        }
+
+        // Generate HTML output code
+        $this->advanceProgressBar(); // Schritt 6
+
+        $headerHtml     = $this->renderHeaderSection($reportData);
+        $interfacesHtml = $this->renderInterfacesSection($reportData['hm_BidCos_Ifc_list']);
+        $devicesHtml    = $this->renderDevicesSection($reportData);
+
+        $this->advanceProgressBar(); // Schritt 7
+
+        $notesHtml = $this->renderNotesSection();
+
+        // Output the results
+        $outputFileName = $this->ReadPropertyString(self::PROP_OUTPUTFILE);
+        if ($outputFileName === '') {
+            $this->UpdateFormField('ProgressBar', 'visible', false);
+            return false;
+        }
+
+        $this->advanceProgressBar(); // Schritt 8
+        $resolvedOutputFileName = $this->resolveOutputFilePath($outputFileName);
+
+        $htmlContent = $this->getHtmlContent($headerHtml, $interfacesHtml, $this->renderSeparator(), $devicesHtml, $notesHtml);
+
+        if (@file_put_contents($resolvedOutputFileName, $htmlContent) === false) {
+            echo sprintf($this->Translate('File "%s" not writable!') . PHP_EOL, $resolvedOutputFileName);
+            return false;
+        }
+
+        $this->UpdateFormField('ProgressBar', 'current', self::PROGRESS_BAR_MAX); // Finaler Schritt 9
+        IPS_Sleep(200);
+        $this->UpdateFormField('ProgressBar', 'visible', false);
+        $this->updateReportLink();
+
+        return true;
+    }
+
+    public function GetReportUrl(): string
+    {
+        $outputFile = $this->ReadPropertyString(self::PROP_OUTPUTFILE);
+        return $this->buildUserReportLink($outputFile);
+    }
+
     public function GetOutputFileAbsolutePath(): string
     {
         $outputFile = $this->ReadPropertyString(self::PROP_OUTPUTFILE);
         return $this->resolveOutputFilePath($outputFile);
     }
+
+    //
+    // Pfad- und Link-Behandlung
+    //
 
     private function isOutputFileCreatable(string $outputFile): bool
     {
@@ -105,7 +232,7 @@ class HMInventoryReportCreator extends IPSModuleStrict
 
     private function isAbsolutePath(string $path): bool
     {
-        if (strpos($path, '/') === 0) {
+        if (str_starts_with($path, '/')) {
             return true;
         }
 
@@ -113,7 +240,7 @@ class HMInventoryReportCreator extends IPSModuleStrict
             return true;
         }
 
-        if (strpos($path, '\\\\') === 0 || strpos($path, '//') === 0) {
+        if (str_starts_with($path, '\\\\') || str_starts_with($path, '//')) {
             return true;
         }
 
@@ -132,134 +259,11 @@ class HMInventoryReportCreator extends IPSModuleStrict
 
         return IPS_GetKernelDir() . $outputFile;
     }
-    // ... existing code ...
-    public function MessageSink(int $TimeStamp, int $SenderID, int $Message, array $Data): void
-    {
-        parent::MessageSink($TimeStamp, $SenderID, $Message, $Data);
-
-        if (($Message === IPS_KERNELMESSAGE) && ($Data[0] === KR_READY)) {
-            $this->ApplyChanges();
-        }
-    }
-
-    public function GetConfigurationForm(): string
-    {
-        $this->RegisterOnceTimer('UpdateReportLink', 'IPS_RequestAction(' . $this->InstanceID . ', "UpdateReportLink", 0);');
-
-        $formPath = __DIR__ . DIRECTORY_SEPARATOR . 'form.json';
-        return file_get_contents($formPath);
-    }
-
-    public function RequestAction(string $Ident, mixed $Value): void
-    {
-        switch ($Ident) {
-            case 'UpdateReportLink':
-                $this->updateReportLink();
-                break;
-        }
-    }
-
-    public function ReceiveData(string $JSONString): string
-    {
-        trigger_error(sprintf('Fatal error: no ReceiveData expected. (%s)', $JSONString));
-
-        return '';
-    }
-
-
-    /**
-     * Erstellt den HM Inventory Report und speichert ihn als HTML-Datei.
-     *
-     * Ursprünglich entwickelt von Andreas Bahrdt (HM-Inventory), Public Domain.
-     * Quellen: http://www.ip-symcon.de/forum/99682-post76.html
-     *          https://www.symcon.de/forum/threads/17633-HM_Inventory
-     *
-     * Historie:
-     * - 27.10.2011: Anpassung für IPS v2.5 (Raketenschnecke)
-     * - 16.03.2016: Anpassung für IPS v4.0 (bumaas)
-     * - 18.01.2017: Erweiterung für HM-IP und HM-Wired (bumaas)
-     *
-     * @return bool True bei Erfolg, false falls der Report nicht erstellt werden konnte.
-     * @throws \JsonException
-     * @throws \JsonException
-     */
-    public function CreateReport(): bool
-    {
-
-        $this->progressBarInit();
-        $progressBarCounter = 0;
-
-        $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter++); // Schritt 1
-
-        $reportData = $this->collectDeviceData($progressBarCounter);
-        if ($reportData === null) {
-            return false;
-        }
-
-        // Wenn gewünscht, die sortierte Liste in die Variable schreiben
-        if ($this->ReadPropertyBoolean(self::PROP_SAVEDEVICELISTINVARIABLE)) {
-            $this->SetValue('DeviceList', json_encode($reportData['HM_array'], JSON_THROW_ON_ERROR));
-        }
-
-        // Generate HTML output code
-        $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter++); // Schritt 6
-
-        // Header-Daten vorbereiten
-        $headerHtml = $this->renderHeaderSection($reportData);
-
-        // Interface-Liste
-        $interfacesHtml = $this->renderInterfacesSection($reportData['hm_BidCos_Ifc_list']);
-
-        // Geräte-Liste
-        $devicesHtml = $this->renderDevicesSection($reportData);
-
-        $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter++); // Schritt 7
-
-        $notesHtml = $this->renderNotesSection();
-
-
-
-        // Output the results
-        $outputFileName = $this->ReadPropertyString(self::PROP_OUTPUTFILE);
-        if ($outputFileName) {
-            $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter++); // Schritt 8
-            $resolvedOutputFileName = $this->resolveOutputFilePath($outputFileName);
-
-            $htmlContent = $this->getHtmlContent(
-                $headerHtml,
-                $interfacesHtml,
-                $this->renderSeparator(),
-                $devicesHtml,
-                $notesHtml,
-                '</table>'
-            );
-
-            if (@file_put_contents($resolvedOutputFileName, $htmlContent) === false) {
-                echo sprintf('File "%s" not writable!' . PHP_EOL, $resolvedOutputFileName);
-                return false;
-            }
-
-            $this->UpdateFormField('ProgressBar', 'current', 9); // Finaler Schritt 9
-            IPS_Sleep(200);
-            $this->UpdateFormField('ProgressBar', 'visible', false);
-            $this->updateReportLink();
-
-            return true;
-        }
-
-        return false;
-    }
-
-    public function GetReportUrl(): string
-    {
-        $outputFile = $this->ReadPropertyString(self::PROP_OUTPUTFILE);
-        return $this->buildUserReportLink($outputFile);
-    }
 
     private function updateReportLink(): void
     {
-        $outputFile = $this->ReadPropertyString(self::PROP_OUTPUTFILE);
-        $link = $this->GetReportUrl();
+        $outputFile   = $this->ReadPropertyString(self::PROP_OUTPUTFILE);
+        $link         = $this->GetReportUrl();
         $resolvedPath = $this->resolveOutputFilePath($outputFile);
 
         $isVisible = ($link !== '') && ($outputFile !== '') && file_exists($resolvedPath);
@@ -277,7 +281,7 @@ class HMInventoryReportCreator extends IPSModuleStrict
         }
 
         $kernelDir = IPS_GetKernelDir();
-        $userDir = $kernelDir . 'user' . DIRECTORY_SEPARATOR;
+        $userDir   = $kernelDir . 'user' . DIRECTORY_SEPARATOR;
 
         $normalizedOutput = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $resolvedOutputFile);
         if (stripos($normalizedOutput, $userDir) !== 0) {
@@ -287,11 +291,11 @@ class HMInventoryReportCreator extends IPSModuleStrict
         $relativePath = substr($normalizedOutput, strlen($userDir));
         $relativePath = str_replace(DIRECTORY_SEPARATOR, '/', $relativePath);
 
-        $parts = array_map('rawurlencode', explode('/', $relativePath));
+        $parts       = array_map('rawurlencode', explode('/', $relativePath));
         $relativeUrl = implode('/', $parts);
 
         $networkInfo = Sys_GetNetworkInfo();
-        $serverIp = 'localhost';
+        $serverIp    = 'localhost';
         foreach ($networkInfo as $adapter) {
             if (!empty($adapter['IP'])) {
                 $serverIp = $adapter['IP'];
@@ -304,289 +308,354 @@ class HMInventoryReportCreator extends IPSModuleStrict
         return 'http://' . $serverIp . ':' . $serverPort . '/user/' . $relativeUrl;
     }
 
+    //
+    // Datensammlung
+    //
+
     /**
      * Sammelt alle benötigten Daten für den Report.
      *
-     * @param int &$progressBarCounter Referenz auf den globalen Fortschrittszähler
-     *
      * @return array|null
      * @throws \JsonException
-     * @throws \JsonException
      */
-    private function collectDeviceData(int &$progressBarCounter): ?array
+    private function collectDeviceData(): ?array
     {
-        $ParentId = $this->fetchParentId();
-        if (!$this->isGatewayActive($ParentId)) {
+        $parentId = $this->fetchParentId();
+        if (!$this->isGatewayActive($parentId)) {
             return null;
         }
 
-        $ParentConfig = json_decode(IPS_GetConfiguration($ParentId), true, 512, JSON_THROW_ON_ERROR);
-        $IP_adr_Homematic = IPS_GetProperty($ParentId, 'Host');
-        [$BidCos_RF_Service_adr, $BidCos_IP_Service_adr] = $this->formatServiceAddresses($ParentConfig, $IP_adr_Homematic);
+        $parentConfig     = json_decode(IPS_GetConfiguration($parentId), true, 512, JSON_THROW_ON_ERROR);
+        $ccuHost          = IPS_GetProperty($parentId, 'Host');
+        $rfServiceAddress = $this->getBidCosServiceAddress($ccuHost, $parentConfig, 'RF');
 
-        [$hm_dev_list, $dev_counter, $err] = $this->getDeviceLists($ParentId, $ParentConfig);
-        if (count($hm_dev_list) === 0) {
-            trigger_error("Can't get any device information from the BidCos-Services (Error: $err)");
+        [$devList, $devCounter, $errorCount] = $this->getDeviceLists($parentId, $parentConfig);
+        if (count($devList) === 0) {
+            $this->LogMessage("Can't get any device information from the BidCos-Services (Error: $errorCount)", KL_ERROR);
             return null;
         }
 
-        // 1. BidCos Interfaces
-        $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter++);  // Schritt 1
-        $xml_rtnmsg = $this->SendRequestMessage('listBidcosInterfaces', [], $BidCos_RF_Service_adr, $ParentConfig['UseSSL'], $ParentConfig['Password'], $ParentConfig['Username']);
+        // 1. BidCos-Interfaces
+        $this->advanceProgressBar(); // Schritt 2
+        $response = $this->SendRequestMessage(
+            'listBidcosInterfaces',
+            [],
+            $rfServiceAddress,
+            $parentConfig['UseSSL'],
+            $parentConfig['Password'],
+            $parentConfig['Username']
+        );
 
-        if ($xml_rtnmsg->errno !== 0) {
+        if ($response->errno !== 0) {
             $this->SendDebug('Error', "Can't get HM-interface information from the BidCos-RF-Service", 0);
             return null;
         }
 
-        $hm_BidCos_Ifc_list = php_xmlrpc_decode($xml_rtnmsg->value());
-        $default = array_column($hm_BidCos_Ifc_list, 'DEFAULT');
-        array_multisort($default, SORT_DESC, $hm_BidCos_Ifc_list);
+        $ifcList = (new Encoder())->decode($response->value());
+        $default = array_column($ifcList, 'DEFAULT');
+        array_multisort($default, SORT_DESC, $ifcList);
 
-        $HM_interface_num = 0;
-        $HM_interface_connected_num = 0;
-        $HM_default_interface_no = 0;
-        foreach ($hm_BidCos_Ifc_list as $key => $hm_ifce) {
-            $HM_interface_num++;
-            if ($hm_ifce['CONNECTED']) {
-                $HM_interface_connected_num++;
+        $interfaceNum          = count($ifcList);
+        $interfaceConnectedNum = 0;
+        $defaultInterfaceNo    = 0;
+        foreach ($ifcList as $key => $ifc) {
+            if ($ifc['CONNECTED']) {
+                $interfaceConnectedNum++;
             }
-            if ($hm_ifce['DEFAULT']) {
-                $HM_default_interface_no = $key;
+            if ($ifc['DEFAULT']) {
+                $defaultInterfaceNo = $key;
             }
         }
 
-        $IPS_device_num = 0;
-        $IPS_HM_channel_num = 0;
-        $HM_module_num = 0;
-        $HM_array = [];
+        // 2. Geräte, die in IP-Symcon angelegt sind
+        $this->advanceProgressBar(); // Schritt 3
+        [$deviceRecords, $ipsDeviceNum, $ipsChannelNum, $moduleNum] = $this->collectIpsDevices($parentId, $ccuHost, $devList);
 
-        // 2. Fill HM_array with devices found in IP-Symcon
-        $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter++);  // Schritt 2
-        foreach (IPS_GetInstanceListByModuleID('{EE4A81C6-5C90-4DB7-AD2F-F6BBD521412E}') as $id) {
-            if ($ParentId !== IPS_GetInstance($id)['ConnectionID']) {
+        // 3. Kanäle, die nicht in IP-Symcon genutzt werden (optional)
+        $this->advanceProgressBar(); // Schritt 4
+        if ($this->ReadPropertyBoolean(self::PROP_SHOWNOTUSEDCHANNELS)) {
+            $moduleNum = $this->appendUnusedChannels($deviceRecords, $ccuHost, $devList, $moduleNum);
+        }
+
+        // 4. RSSI-Levels
+        $this->advanceProgressBar(); // Schritt 5
+        $this->attachRssiLevels($deviceRecords, $ifcList, $rfServiceAddress, $parentConfig);
+
+        $this->sortDeviceRecords($deviceRecords);
+
+        return [
+            'dev_counter'                => $devCounter,
+            'HM_array'                   => $deviceRecords,
+            'hm_BidCos_Ifc_list'         => $ifcList,
+            'HM_interface_num'           => $interfaceNum,
+            'HM_interface_connected_num' => $interfaceConnectedNum,
+            'IPS_device_num'             => $ipsDeviceNum,
+            'IPS_HM_channel_num'         => $ipsChannelNum,
+            'HM_module_num'              => $moduleNum,
+            'HM_default_interface_no'    => $defaultInterfaceNo
+        ];
+    }
+
+    /**
+     * Sammelt alle HomeMatic-Geräteinstanzen, die in IP-Symcon angelegt sind.
+     *
+     * @return array{0: array, 1: int, 2: int, 3: int} [Geräteliste, Anzahl IPS-Instanzen, Anzahl belegter HM-Kanäle, Anzahl Einträge]
+     */
+    private function collectIpsDevices(int $parentId, string $ccuHost, array $devList): array
+    {
+        $records       = [];
+        $ipsDeviceNum  = 0;
+        $ipsChannelNum = 0;
+        $moduleNum     = 0;
+
+        foreach (IPS_GetInstanceListByModuleID(self::GUID_HOMEMATIC_DEVICE) as $id) {
+            if ($parentId !== IPS_GetInstance($id)['ConnectionID']) {
                 continue;
             }
-            $HM_module_num++;
-            $IPS_device_num++;
-            $IPS_HM_channel_already_assigned = false;
-            $HM_address = IPS_GetProperty($id, 'Address');
+            $moduleNum++;
+            $ipsDeviceNum++;
 
-            $NeedlePos = strpos($HM_address, ':');
-            if (!$NeedlePos) {
+            $address   = IPS_GetProperty($id, 'Address');
+            $needlePos = strpos($address, ':');
+            if (!$needlePos) {
                 continue;
             }
-            $HM_Par_address = substr($HM_address, 0, $NeedlePos);
+            $parentAddress = substr($address, 0, $needlePos);
 
-            $HM_device = '-'; $HM_devname = '-'; $HM_FWversion = ' '; $HM_Interface = '';
-            $HM_Roaming = ' '; $HM_devtype = '-'; $HM_direction = '-'; $HM_AES_active = '-';
-            $hm_chld_dev = null; $hm_par_dev = null;
+            $channelInfo = $this->extractChannelInfo(
+                $this->findDeviceByAddress($devList, $address),
+                $this->findDeviceByAddress($devList, $parentAddress),
+                $ccuHost
+            );
 
-            foreach ($hm_dev_list as $hm_dev) {
-                match ($hm_dev['ADDRESS']) {
-                    $HM_address     => $hm_chld_dev = $hm_dev,
-                    $HM_Par_address => $hm_par_dev = $hm_dev,
-                    default         => null
-                };
-
-                if ($hm_chld_dev !== null) {
-                    if (isset($hm_dev['PARENT_TYPE'])) $HM_device = $hm_dev['PARENT_TYPE'];
-                    if ($this->ReadPropertyBoolean(self::PROP_SHOWHMCONFIGURATORDEVICENAMES)) {
-                        $HM_devname = $this->getHMChannelName($IP_adr_Homematic, $hm_dev['ADDRESS']);
-                    }
-                    $device_info = $this->extractDeviceInfo($hm_par_dev);
-                    $HM_FWversion = $device_info['FIRMWARE'];
-                    $HM_Interface = $device_info['INTERFACE'];
-                    $HM_Roaming   = $device_info['ROAMING'];
-                    $HM_devtype = $hm_dev['TYPE'];
-                    if (isset($hm_dev['DIRECTION'])) {
-                        if ($hm_dev['DIRECTION'] === 1) $HM_direction = 'TX';
-                        elseif ($hm_dev['DIRECTION'] === 2) $HM_direction = 'RX';
-                    }
-                    if (isset($hm_dev['AES_ACTIVE']) && ($hm_dev['AES_ACTIVE'] !== 0)) $HM_AES_active = '+';
+            // Ist der HM-Kanal bereits einer anderen IPS-Instanz zugeordnet?
+            $alreadyAssigned = false;
+            foreach ($records as &$record) {
+                if ($record['HM_address'] === $address) {
+                    $record['IPS_HM_d_assgnd'] = true;
+                    $alreadyAssigned           = true;
                     break;
                 }
             }
-
-            if ($HM_address !== '') {
-                foreach ($HM_array as &$HM_dev_ref) {
-                    if ($HM_dev_ref['HM_address'] === $HM_address) {
-                        $HM_dev_ref['IPS_HM_d_assgnd'] = true;
-                        $IPS_HM_channel_already_assigned = true;
-                        break;
-                    }
-                }
-                unset($HM_dev_ref);
-                if (!$IPS_HM_channel_already_assigned) $IPS_HM_channel_num++;
+            unset($record);
+            if (!$alreadyAssigned) {
+                $ipsChannelNum++;
             }
 
-            $IPS_name = $this->ReadPropertyBoolean(self::PROP_SHOWLONGIPSDEVICENAMES) ? IPS_GetLocation($id) : IPS_GetName($id);
+            $ipsName = $this->ReadPropertyBoolean(self::PROP_SHOWLONGIPSDEVICENAMES) ? IPS_GetLocation($id) : IPS_GetName($id);
 
-            $HM_array[] = [
-                'IPS_occ' => $HM_module_num, 'IPS_id' => $id, 'IPS_name' => $IPS_name,
-                'IPS_HM_d_assgnd' => $IPS_HM_channel_already_assigned, 'HM_address' => $HM_address,
-                'HM_device' => $HM_device, 'HM_devname' => $HM_devname, 'HM_FWversion' => $HM_FWversion,
-                'HM_devtype' => $HM_devtype, 'HM_direction' => $HM_direction, 'HM_AES_active' => $HM_AES_active,
-                'HM_Interface' => $HM_Interface, 'HM_Roaming' => $HM_Roaming
-            ];
+            $records[] = $this->createDeviceRecord($moduleNum, $id, $ipsName, $alreadyAssigned, $address, $channelInfo);
         }
 
-        // 3. Add devices not in Symcon (optional)
-        $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter++);  // Schritt 3
-        if ($this->ReadPropertyBoolean(self::PROP_SHOWNOTUSEDCHANNELS)) {
-            foreach ($hm_dev_list as $hm_dev) {
-                $HM_address      = $hm_dev['ADDRESS'];
-                $hm_dev_in_array = false;
-                foreach ($HM_array as $HM_dev_a) {
-                    if ($hm_dev['ADDRESS'] === $HM_dev_a['HM_address']) {
-                        $hm_dev_in_array = true;
-                        break;
-                    }
-                }
+        return [$records, $ipsDeviceNum, $ipsChannelNum, $moduleNum];
+    }
 
-                if (($hm_dev_in_array === false) && isset($hm_dev['PARENT']) && ($hm_dev['PARENT'] !== '')) {
-                    if ($hm_dev['TYPE'] === 'VIRTUAL_KEY' && !$this->ReadPropertyBoolean(self::PROP_SHOWVIRTUALKEYENTRIES)) {
-                        continue;
-                    }
-                    if ($hm_dev['TYPE'] === 'MAINTENANCE' && !$this->ReadPropertyBoolean(self::PROP_SHOWMAINTENANCEENTRIES)) {
-                        continue;
-                    }
-                    $hm_chld_dev    = $hm_dev;
-                    $hm_par_dev     = null;
-                    $HM_Par_address = substr($HM_address, 0, strpos($HM_address, ':'));
-                    foreach ($hm_dev_list as $hm_p_dev) {
-                        if ($hm_p_dev['ADDRESS'] === $HM_Par_address) {
-                            $hm_par_dev = $hm_p_dev;
-                        }
-                    }
-                    if ($hm_chld_dev !== null) {
-                        $HM_module_num++;
-                        $HM_device  = $hm_chld_dev['PARENT_TYPE'];
-                        $HM_devname = '-';
-                        if ($this->ReadPropertyBoolean('ShowHMConfiguratorDeviceNames')) {
-                            $HM_devname = $this->getHMChannelName($IP_adr_Homematic, $HM_address);
-                        }
+    /**
+     * Ergänzt die Geräteliste um Kanäle, die nicht in IP-Symcon angelegt sind.
+     *
+     * @return int Fortgeschriebene Anzahl der Einträge
+     */
+    private function appendUnusedChannels(array &$records, string $ccuHost, array $devList, int $moduleNum): int
+    {
+        foreach ($devList as $dev) {
+            $address = $dev['ADDRESS'];
 
-                        $device_info = $this->extractDeviceInfo($hm_par_dev);
+            if (!isset($dev['PARENT']) || ($dev['PARENT'] === '')) {
+                continue;
+            }
+            if ($this->recordWithAddressExists($records, $address)) {
+                continue;
+            }
+            if (($dev['TYPE'] === 'VIRTUAL_KEY') && !$this->ReadPropertyBoolean(self::PROP_SHOWVIRTUALKEYENTRIES)) {
+                continue;
+            }
+            if (($dev['TYPE'] === 'MAINTENANCE') && !$this->ReadPropertyBoolean(self::PROP_SHOWMAINTENANCEENTRIES)) {
+                continue;
+            }
 
-                        $HM_FWversion = $device_info['FIRMWARE'];
-                        $HM_Interface = $device_info['INTERFACE'];
-                        $HM_Roaming   = $device_info['ROAMING'];
+            $moduleNum++;
+            $parentAddress = substr($address, 0, (int)strpos($address, ':'));
+            $channelInfo   = $this->extractChannelInfo($dev, $this->findDeviceByAddress($devList, $parentAddress), $ccuHost);
 
-                        $HM_devtype    = $hm_chld_dev['TYPE'];
-                        $HM_direction  = '-';
-                        $HM_AES_active = '-';
-                        if ($hm_dev['DIRECTION'] === 1) {
-                            $HM_direction = 'TX';
-                        } elseif ($hm_dev['DIRECTION'] === 2) {
-                            $HM_direction = 'RX';
-                        }
-                        if ($hm_chld_dev['AES_ACTIVE'] !== 0) {
-                            $HM_AES_active = '+';
-                        }
+            $records[] = $this->createDeviceRecord($moduleNum, '-', '-', false, $address, $channelInfo);
+        }
 
-                        $HM_array[] = [
-                            'IPS_occ'         => $HM_module_num,
-                            'IPS_id'          => '-',
-                            'IPS_name'        => '-',
-                            'IPS_HM_d_assgnd' => false,
-                            'HM_address'      => $HM_address,
-                            'HM_device'       => $HM_device,
-                            'HM_devname'      => $HM_devname,
-                            'HM_FWversion'    => $HM_FWversion,
-                            'HM_devtype'      => $HM_devtype,
-                            'HM_direction'    => $HM_direction,
-                            'HM_AES_active'   => $HM_AES_active,
-                            'HM_Interface'    => $HM_Interface,
-                            'HM_Roaming'      => $HM_Roaming
-                        ];
-                    }
-                }
+        return $moduleNum;
+    }
+
+    private function findDeviceByAddress(array $devList, string $address): ?array
+    {
+        foreach ($devList as $dev) {
+            if ($dev['ADDRESS'] === $address) {
+                return $dev;
             }
         }
+        return null;
+    }
 
-        // 4. RSSI Levels (RF & IP)
-        $this->UpdateFormField('ProgressBar', 'current', $progressBarCounter++);  // Schritt 4
-        // Hole RSSI Infos vom RF Service
-        $xml_rtnmsg = $this->SendRequestMessage('rssiInfo', [], $BidCos_RF_Service_adr, $ParentConfig['UseSSL'], $ParentConfig['Password'], $ParentConfig['Username']);
-        $hm_rssi_list = ($xml_rtnmsg->errno === 0) ? php_xmlrpc_decode($xml_rtnmsg->value()) : [];
-
-        foreach ($HM_array as &$HM_dev) {
-            $hm_adr = explode(':', $HM_dev['HM_address']);
-
-            // Nur für das Hauptgerät (Kanal 0 oder ohne Kanal) RSSI suchen
-            if (isset($hm_rssi_list[$hm_adr[0]])) {
-                $HM_dev['HM_levels'] = [];
-                foreach ($hm_BidCos_Ifc_list as $ifc) {
-                    if (!$ifc['CONNECTED']) continue;
-
-                    $adr = $ifc['ADDRESS'];
-                    if (isset($hm_rssi_list[$hm_adr[0]][$adr])) {
-                        // Speichere RX, TX, IsAssociated, IsBest
-                        $HM_dev['HM_levels'][] = [
-                            $hm_rssi_list[$hm_adr[0]][$adr][0], // RX
-                            $hm_rssi_list[$hm_adr[0]][$adr][1], // TX
-                            ($HM_dev['HM_Interface'] === $adr), // IsAssociated
-                            false // IsBest (wird unten berechnet)
-                        ];
-                    }
-                }
-
-                // Bestes Interface markieren
-                if (count($HM_dev['HM_levels']) > 0) {
-                    $best_idx = 0;
-                    $max_rssi = -255;
-                    foreach ($HM_dev['HM_levels'] as $idx => $lvl) {
-                        if ($lvl[0] > $max_rssi && $lvl[0] !== self::INVALID_LEVEL) {
-                            $max_rssi = $lvl[0];
-                            $best_idx = $idx;
-                        }
-                    }
-                    $HM_dev['HM_levels'][$best_idx][3] = true;
-                }
+    private function recordWithAddressExists(array $records, string $address): bool
+    {
+        foreach ($records as $record) {
+            if ($record['HM_address'] === $address) {
+                return true;
             }
         }
-        unset($HM_dev);
+        return false;
+    }
 
-        // Sortierung anwenden
-        $sortOrder = $this->ReadPropertyInteger(self::PROP_SORTORDER);
-        switch ($sortOrder) {
-            case 1: // HM device type
-                usort($HM_array, [self::class, 'usort_HM_devtype']);
-                break;
-            case 2: // HM channel type
-                usort($HM_array, [self::class, 'usort_HM_device_adr']);
-                break;
-            case 3: // IPS device name
-                usort($HM_array, [self::class, 'usort_IPS_dev_name']);
-                break;
-            case 4: // HM device name
-                usort($HM_array, [self::class, 'usort_HM_devname']);
-                break;
-            case 0: // HM address
-            default:
-                usort($HM_array, [self::class, 'usort_HM_address']);
-                break;
+    /**
+     * Extrahiert die Anzeige-Informationen eines HM-Kanals (samt Informationen des zugehörigen Geräts).
+     */
+    private function extractChannelInfo(?array $channelDev, ?array $parentDev, string $ccuHost): array
+    {
+        $info = [
+            'HM_device'     => '-',
+            'HM_devname'    => '-',
+            'HM_FWversion'  => ' ',
+            'HM_devtype'    => '-',
+            'HM_direction'  => '-',
+            'HM_AES_active' => '-',
+            'HM_Interface'  => '',
+            'HM_Roaming'    => ' ',
+        ];
+
+        if ($channelDev === null) {
+            return $info;
         }
 
+        if (isset($channelDev['PARENT_TYPE'])) {
+            $info['HM_device'] = $channelDev['PARENT_TYPE'];
+        }
+
+        if ($this->ReadPropertyBoolean(self::PROP_SHOWHMCONFIGURATORDEVICENAMES)) {
+            $info['HM_devname'] = $this->getHMChannelName($ccuHost, $channelDev['ADDRESS']);
+        }
+
+        $parentInfo           = $this->extractDeviceInfo($parentDev);
+        $info['HM_FWversion'] = $parentInfo['FIRMWARE'];
+        $info['HM_Interface'] = $parentInfo['INTERFACE'];
+        $info['HM_Roaming']   = $parentInfo['ROAMING'];
+
+        $info['HM_devtype']   = $channelDev['TYPE'];
+        $info['HM_direction'] = match ($channelDev['DIRECTION'] ?? null) {
+            1       => 'TX',
+            2       => 'RX',
+            default => '-'
+        };
+
+        if (($channelDev['AES_ACTIVE'] ?? 0) !== 0) {
+            $info['HM_AES_active'] = '+';
+        }
+
+        return $info;
+    }
+
+    private function extractDeviceInfo(?array $parentDev): array
+    {
+        if ($parentDev !== null) {
+            $firmware  = $parentDev['FIRMWARE'];
+            $interface = $parentDev['INTERFACE'] ?? '';
+            $roaming   = (isset($parentDev['ROAMING']) && $parentDev['ROAMING']) ? '+' : '-';
+        } else {
+            $firmware  = '';
+            $interface = '';
+            $roaming   = '';
+        }
+        return ['FIRMWARE' => $firmware, 'INTERFACE' => $interface, 'ROAMING' => $roaming];
+    }
+
+    private function createDeviceRecord(
+        int $occurrence,
+        int|string $ipsId,
+        string $ipsName,
+        bool $alreadyAssigned,
+        string $address,
+        array $channelInfo
+    ): array {
         return [
-            'dev_counter' => $dev_counter,
-            'HM_array' => $HM_array,
-            'hm_BidCos_Ifc_list' => $hm_BidCos_Ifc_list,
-            'HM_interface_num' => $HM_interface_num,
-            'HM_interface_connected_num' => $HM_interface_connected_num,
-            'IPS_device_num' => $IPS_device_num,
-            'IPS_HM_channel_num' => $IPS_HM_channel_num,
-            'HM_module_num' => $HM_module_num,
-            'HM_default_interface_no' => $HM_default_interface_no
+            'IPS_occ'         => $occurrence,
+            'IPS_id'          => $ipsId,
+            'IPS_name'        => $ipsName,
+            'IPS_HM_d_assgnd' => $alreadyAssigned,
+            'HM_address'      => $address,
+            'HM_device'       => $channelInfo['HM_device'],
+            'HM_devname'      => $channelInfo['HM_devname'],
+            'HM_FWversion'    => $channelInfo['HM_FWversion'],
+            'HM_devtype'      => $channelInfo['HM_devtype'],
+            'HM_direction'    => $channelInfo['HM_direction'],
+            'HM_AES_active'   => $channelInfo['HM_AES_active'],
+            'HM_Interface'    => $channelInfo['HM_Interface'],
+            'HM_Roaming'      => $channelInfo['HM_Roaming']
         ];
     }
+
+    /**
+     * Fragt die RSSI-Werte vom BidCos-RF-Service ab und ergänzt sie in der Geräteliste ('HM_levels').
+     *
+     * @throws \JsonException
+     */
+    private function attachRssiLevels(array &$records, array $ifcList, string $rfServiceAddress, array $parentConfig): void
+    {
+        $response = $this->SendRequestMessage(
+            'rssiInfo',
+            [],
+            $rfServiceAddress,
+            $parentConfig['UseSSL'],
+            $parentConfig['Password'],
+            $parentConfig['Username']
+        );
+        $rssiList = ($response->errno === 0) ? (new Encoder())->decode($response->value()) : [];
+
+        foreach ($records as &$record) {
+            // Nur für das Hauptgerät (Kanal 0 oder ohne Kanal) RSSI suchen
+            $deviceAddress = explode(':', $record['HM_address'])[0];
+            if (!isset($rssiList[$deviceAddress])) {
+                continue;
+            }
+
+            $record['HM_levels'] = [];
+            foreach ($ifcList as $ifc) {
+                if (!$ifc['CONNECTED']) {
+                    continue;
+                }
+
+                $ifcAddress = $ifc['ADDRESS'];
+                if (isset($rssiList[$deviceAddress][$ifcAddress])) {
+                    // Speichere RX, TX, IsAssociated, IsBest
+                    $record['HM_levels'][] = [
+                        $rssiList[$deviceAddress][$ifcAddress][0],  // RX
+                        $rssiList[$deviceAddress][$ifcAddress][1],  // TX
+                        ($record['HM_Interface'] === $ifcAddress),  // IsAssociated
+                        false                                       // IsBest (wird unten berechnet)
+                    ];
+                }
+            }
+
+            // Bestes Interface markieren
+            if (count($record['HM_levels']) > 0) {
+                $bestIdx = 0;
+                $maxRssi = -255;
+                foreach ($record['HM_levels'] as $idx => $level) {
+                    if (($level[0] > $maxRssi) && ($level[0] !== self::INVALID_LEVEL)) {
+                        $maxRssi = $level[0];
+                        $bestIdx = $idx;
+                    }
+                }
+                $record['HM_levels'][$bestIdx][3] = true;
+            }
+        }
+        unset($record);
+    }
+
+    //
+    // HTML-Rendering
+    //
 
     private function renderHeaderSection(array $data): string
     {
         $moduleVersion = $this->getModuleVersion();
-        $inventoryStr = sprintf('<b>HM Inventory (%s) </b><b>&nbsp found at %s</b>', $moduleVersion, date('d.m.Y H:i:s'));
-        $interfaceStr = sprintf(
+        $inventoryStr  = sprintf('<b>HM Inventory (%s) </b><b>&nbsp; found at %s</b>', $moduleVersion, date('d.m.Y H:i:s'));
+        $interfaceStr  = sprintf(
             '%s HomeMatic interfaces (%s connected) with %s HM-RF devices, %s HM-wired devices and %s HmIP devices',
             $data['HM_interface_num'],
             $data['HM_interface_connected_num'],
@@ -594,7 +663,7 @@ class HMInventoryReportCreator extends IPSModuleStrict
             $data['dev_counter']['WR'],
             $data['dev_counter']['IP']
         );
-        $instanceStr = sprintf('%s IPS instances (connected to %s HM channels)', $data['IPS_device_num'], $data['IPS_HM_channel_num']);
+        $instanceStr   = sprintf('%s IPS instances (connected to %s HM channels)', $data['IPS_device_num'], $data['IPS_HM_channel_num']);
 
         $html = "<table class='table-align-left Background-color'>";
         $html .= "<tr style='vertical-align: top'><td><table style='text-align: left; font-size: large; color: #99AABB'>";
@@ -623,33 +692,35 @@ class HMInventoryReportCreator extends IPSModuleStrict
         $html .= '<tr class="bgcolor-header-devices">';
 
         // Header-Spalten
-        $dthdr_td_b = '<td style="font-size: small; color: #EEEEEE"><b>';
+        $dthdr_td_b   = '<td style="font-size: small; color: #EEEEEE"><b>';
         $dthdr_td_b_r = '<td style="text-align: right; font-size: small; color: #EEEEEE"><b>';
-        $dthdr_td_e = '</b></td>';
-        $dthdr_td_eb = $dthdr_td_e . $dthdr_td_b;
+        $dthdr_td_e   = '</b></td>';
+        $dthdr_td_eb  = $dthdr_td_e . $dthdr_td_b;
 
-        $html .= $dthdr_td_b_r . '&nbsp##&nbsp' . $dthdr_td_eb . 'IPS ID' . $dthdr_td_eb . 'IPS device name&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp'
-                 . $dthdr_td_eb . 'HM address' . $dthdr_td_e;
+        $html .= $dthdr_td_b_r . '&nbsp;##&nbsp;' . $dthdr_td_eb . 'IPS ID' . $dthdr_td_eb
+                 . 'IPS device name&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;' . $dthdr_td_eb . 'HM address' . $dthdr_td_e;
 
         if ($this->ReadPropertyBoolean(self::PROP_SHOWHMCONFIGURATORDEVICENAMES)) {
             $html .= $dthdr_td_b . 'HM device name' . $dthdr_td_e;
         }
 
-        $html .= $dthdr_td_b . 'HM device type' . $dthdr_td_eb . 'Fw.' . $dthdr_td_eb . 'HM channel type' . $dthdr_td_eb . 'Dir.' . $dthdr_td_eb . 'AES' . $dthdr_td_e;
+        $html .= $dthdr_td_b . 'HM device type' . $dthdr_td_eb . 'Fw.' . $dthdr_td_eb . 'HM channel type' . $dthdr_td_eb . 'Dir.' . $dthdr_td_eb
+                 . 'AES' . $dthdr_td_e;
         $html .= '<td style="width: 2%; text-align: center; color: #EEEEEE; font-size: medium">Roa- ming</td>';
 
         foreach ($data['hm_BidCos_Ifc_list'] as $hm_ifce) {
             if ($hm_ifce['CONNECTED']) {
-                $html .= '<td style="width: 6%; text-align: center; color: #EEEEEE; font-size: small">' . $hm_ifce['ADDRESS'] . ' tx/rx&nbsp(db&micro;V)</td>';
+                $html .= '<td style="width: 6%; text-align: center; color: #EEEEEE; font-size: small">' . $hm_ifce['ADDRESS']
+                         . ' tx/rx&nbsp;(db&micro;V)</td>';
             }
         }
         $html .= '</tr>' . PHP_EOL;
 
-        $entry_no = 0;
+        $entry_no        = 0;
         $previous_hm_adr = '';
         foreach ($data['HM_array'] as $HM_dev) {
-            $hm_adr = explode(':', $HM_dev['HM_address']);
-            $same_device = ($hm_adr[0] === $previous_hm_adr);
+            $hm_adr          = explode(':', $HM_dev['HM_address']);
+            $same_device     = ($hm_adr[0] === $previous_hm_adr);
             $previous_hm_adr = $hm_adr[0];
 
             $html .= $this->renderDeviceRow($HM_dev, ++$entry_no, $same_device, $data['HM_interface_connected_num']);
@@ -669,7 +740,7 @@ class HMInventoryReportCreator extends IPSModuleStrict
         $tr_class = (($entryNo % 2) === 1) ? 'bg_color_oddline' : 'bg_color_evenline';
 
         $html = '<tr class="' . $tr_class . '">';
-        $html .= '<td class="' . $td_color . ' text-right">' . $entryNo . '&nbsp&nbsp</td>';
+        $html .= '<td class="' . $td_color . ' text-right">' . $entryNo . '&nbsp;&nbsp;</td>';
         $html .= '<td class="' . $td_color . '">' . $dev['IPS_id'] . '</td>';
         $html .= '<td class="' . $td_color . '">' . $dev['IPS_name'] . '</td>';
         $html .= '<td class="' . $td_color . '">' . $dev['HM_address'] . '</td>';
@@ -736,15 +807,15 @@ HEREDOC;
 
     private function renderRssiColumns(array $dev, int $connectedIfcNum): string
     {
-        $html = '';
         if (!isset($dev['HM_levels'])) {
             return str_repeat('<td></td>', $connectedIfcNum);
         }
 
+        $html = '';
         for ($i = 0; $i < $connectedIfcNum; $i++) {
             if (isset($dev['HM_levels'][$i])) {
-                $lciValue = $dev['HM_levels'][$i];
-                $isBest = (bool)($lciValue[3] ?? false);
+                $lciValue     = $dev['HM_levels'][$i];
+                $isBest       = (bool)($lciValue[3] ?? false);
                 $isAssociated = ($dev['HM_Roaming'] === '+') || ($lciValue[2] ?? false);
 
                 if ($isBest) {
@@ -755,8 +826,8 @@ HEREDOC;
 
                 [$rx, $tx] = $this->getRxTxLevelString((int)$lciValue[0], (int)$lciValue[1]);
 
-                $content = $isAssociated ? "<ins>$rx &#047 $tx</ins>" : "$rx &#047 $tx";
-                $html .= '<td class="text-center"><p style="color: ' . $color . '">' . $content . '</p></td>';
+                $content = $isAssociated ? "<ins>$rx &#047; $tx</ins>" : "$rx &#047; $tx";
+                $html    .= '<td class="text-center"><p style="color: ' . $color . '">' . $content . '</p></td>';
             } else {
                 $html .= '<td></td>';
             }
@@ -769,31 +840,12 @@ HEREDOC;
         return '<tr><td colspan=3><table class="table-align-left"><tr><td></td></tr></table></td></tr>';
     }
 
-    private function extractDeviceInfo($hm_par_dev): array
-    {
-        if ($hm_par_dev !== null) {
-            $HM_FWversion = $hm_par_dev['FIRMWARE'];
-            $HM_Interface = $hm_par_dev['INTERFACE'] ?? '';
-            if (isset($hm_par_dev['ROAMING']) && $hm_par_dev['ROAMING']) {
-                $HM_Roaming = '+';
-            } else {
-                $HM_Roaming = '-';
-            }
-        } else {
-            $HM_FWversion = '';
-            $HM_Interface = '';
-            $HM_Roaming   = '';
-        }
-        return ['FIRMWARE' => $HM_FWversion, 'INTERFACE' => $HM_Interface, 'ROAMING' => $HM_Roaming];
-    }
-
-
-    private function generateTableRow($fontSize, $color, $content): string
+    private function generateTableRow(string $fontSize, string $color, string $content): string
     {
         return "<tr><td style='font-size: $fontSize; color: $color'>$content</td>";
     }
 
-    private function formatInterfaceRow($hm_ifce): string
+    private function formatInterfaceRow(array $hm_ifce): string
     {
         $italicStart = $hm_ifce['DEFAULT'] ? '<i>' : '';
         $italicEnd   = $hm_ifce['DEFAULT'] ? '</i>' : '';
@@ -802,7 +854,7 @@ HEREDOC;
         $interfaceInfo    = sprintf('%s (Fw: %s, DC: %s%%)', $hm_ifce['ADDRESS'], $hm_ifce['FIRMWARE_VERSION'], $hm_ifce['DUTY_CYCLE']);
 
         return "<tr>
-                <td style='font-size: small;color: #EEEEEE'>{$italicStart}Interface: $interfaceInfo&nbsp{$italicEnd}</td>
+                <td style='font-size: small;color: #EEEEEE'>{$italicStart}Interface: $interfaceInfo&nbsp;{$italicEnd}</td>
                 <td style='font-size: small;color: #EEEEEE'>{$italicStart}{$hm_ifce['DESCRIPTION']}{$italicEnd}</td>
                 <td style='font-size: small;color: #EEEEEE'>{$italicStart}{$connectionStatus}{$italicEnd}</td>
             </tr>" . PHP_EOL;
@@ -824,7 +876,6 @@ HEREDOC;
      * @param string $HTML_sep   The HTML content for the separators section.
      * @param string $HTML_dvcs  The HTML content for the devices section.
      * @param string $HTML_notes The HTML content for the notes section.
-     * @param string $HTML_end   The HTML content for the ending section.
      *
      * @return string The generated HTML content.
      */
@@ -833,8 +884,7 @@ HEREDOC;
         string $HTML_ifcs,
         string $HTML_sep,
         string $HTML_dvcs,
-        string $HTML_notes,
-        string $HTML_end
+        string $HTML_notes
     ): string {
         return <<<HEREDOC
 <html lang="">
@@ -846,20 +896,20 @@ HEREDOC;
             background-color: #000000;
             color: #dddddd;
         }
-        
+
         .table-align-left {
             width: 100%;
             text-align: left;
         }
-        
+
         .Background-color {
             background-color: #223344;
         }
-        
+
         .bgcolor-header-devices {
             background-color: #334455;
         }
-        
+
         .bg_color_oddline {
             background-color: #181818;
             font-size: 0.8em;
@@ -880,11 +930,11 @@ HEREDOC;
 
         .gray-text {
             color: #DDDDDD;
-        }        
+        }
 
         .pale-red-text {
             color: #FFAAAA;
-        }        
+        }
 
     </style>
     <title></title>
@@ -892,52 +942,24 @@ HEREDOC;
 
 <body>
   $HTML_intro
-  
+
   <tr> <!-- Überschriftenzeile -->
     <td colspan=3><table style='width: 100%; text-align: left; background-color: #112233'><tr><td><h1>HM Inventory</h1></td></tr></table></td>
   </tr> <!-- Ende Überschriftenzeile -->
-  
+
   $HTML_ifcs
   $HTML_sep
   $HTML_dvcs
   $HTML_notes
-  $HTML_end
+  </table>
 </body>
 </html>
 HEREDOC;
     }
 
-    private function fetchParentId(): int
-    {
-        return @IPS_GetInstance($this->InstanceID)['ConnectionID'];
-    }
-
-    private function isGatewayActive(int $parentId): bool
-    {
-        if ($parentId === 0) {
-            echo 'Gateway is not configured!' . PHP_EOL . PHP_EOL;
-            return false;
-        }
-        $this->SendDebug('Parent', sprintf('%s (#%s)', IPS_GetName($parentId), $parentId), 0);
-
-        if (($this->GetStatus() !== IS_ACTIVE) || !$this->HasActiveParent()) {
-            echo 'Instance is not active!' . PHP_EOL . PHP_EOL;
-            return false;
-        }
-        return true;
-    }
-
-    private function formatServiceAddresses(array $ParentConfig, string $IP_adr_Homematic): array
-    {
-        if ($ParentConfig['UseSSL']) {
-            $BidCos_RF_Service_adr = sprintf('https://%s:%s', $IP_adr_Homematic, $ParentConfig['RFSSLPort']);
-            $BidCos_IP_Service_adr = sprintf('https://%s:%s', $IP_adr_Homematic, $ParentConfig['IPSSLPort']);
-        } else {
-            $BidCos_RF_Service_adr = sprintf('http://%s:%s', $IP_adr_Homematic, $ParentConfig['RFPort']);
-            $BidCos_IP_Service_adr = sprintf('http://%s:%s', $IP_adr_Homematic, $ParentConfig['IPPort']);
-        }
-        return [$BidCos_RF_Service_adr, $BidCos_IP_Service_adr];
-    }
+    //
+    // Versionsinformationen
+    //
 
     /**
      * Retrieves the details of a library from a JSON file.
@@ -948,7 +970,11 @@ HEREDOC;
     private function getLibraryDetails(): array
     {
         $filename = __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . 'library.json';
-        return json_decode(file_get_contents($filename), true, 512, JSON_THROW_ON_ERROR);
+        $content  = file_get_contents($filename);
+        if ($content === false) {
+            return [];
+        }
+        return json_decode($content, true, 512, JSON_THROW_ON_ERROR);
     }
 
     /**
@@ -960,91 +986,87 @@ HEREDOC;
     private function getModuleVersion(): string
     {
         $library = $this->getLibraryDetails();
-        return sprintf('%s.%s', $library['version'], $library['build']);
+        return sprintf('%s.%s', $library['version'] ?? '?', $library['build'] ?? '?');
     }
 
-    /**
-     * Processes HM devices by type and updates the device list, device counter, and error count.
-     *
-     * @param string  $deviceType   The type of device.
-     * @param int     $parentId     The ID of the parent.
-     * @param array   $parentConfig The configuration for the parent.
-     * @param array  &$hmDevList    The device list.
-     * @param array  &$devCounter   The device counter.
-     * @param int    &$err          The error count.
-     *
-     * @return void
-     * @throws \JsonException
-     */
-    private function processHmDevicesByType(
-        string $deviceType,
-        int $parentId,
-        array $parentConfig,
-        array &$hmDevList,
-        array &$devCounter,
-        int &$err
-    ): void {
-        $deviceHost      = IPS_GetProperty($parentId, 'Host');
-        $serviceAddress  = $this->getBidCosServiceAddress($deviceHost, $parentConfig, $deviceType);
-        $requestResponse = $this->SendRequestMessage(
-            'listDevices',
-            [],
-            $serviceAddress,
-            $parentConfig['UseSSL'],
-            $parentConfig['Password'],
-            $parentConfig['Username']
-        );
+    //
+    // Gateway (CCU) und Geräte-Abfragen
+    //
 
-        if ($requestResponse->errno === 0) {
-            $decodedResponse = php_xmlrpc_decode($requestResponse->value());
-            foreach ($decodedResponse as $device) {
-                if (($device['PARENT'] === '') && ($device['ADDRESS'] !== 'BidCoS-Wir')) {
-                    $devCounter[$deviceType]++;
-                }
-            }
-            $hmDevList = array_merge($hmDevList, $decodedResponse);
-        } else {
-            $this->SendDebug('Error', sprintf(self::ERROR_MSG, $deviceType), 0);
-            $err++;
+    private function fetchParentId(): int
+    {
+        return IPS_GetInstance($this->InstanceID)['ConnectionID'];
+    }
+
+    private function isGatewayActive(int $parentId): bool
+    {
+        if ($parentId === 0) {
+            echo $this->Translate('Gateway is not configured!') . PHP_EOL . PHP_EOL;
+            return false;
         }
+        $this->SendDebug('Parent', sprintf('%s (#%s)', IPS_GetName($parentId), $parentId), 0);
+
+        if (($this->GetStatus() !== IS_ACTIVE) || !$this->HasActiveParent()) {
+            echo $this->Translate('Instance is not active!') . PHP_EOL . PHP_EOL;
+            return false;
+        }
+        return true;
     }
 
     /**
-     * Retrieves the device lists for a given parent ID and parent configuration.
+     * Retrieves the device lists of all BidCos services (RF, IP, WR).
      *
-     * @param int   $parentId     The ID of the parent.
-     * @param array $parentConfig The configuration for the parent.
-     *
-     * @return array The device lists, devCounter, and error value.
+     * @return array{0: array, 1: array<string, int>, 2: int} [Geräteliste, Gerätezähler je Service, Fehlerzähler]
      * @throws \JsonException
      */
     private function getDeviceLists(int $parentId, array $parentConfig): array
     {
-        $hmDevList  = [];
+        $ccuHost    = IPS_GetProperty($parentId, 'Host');
+        $devLists   = [];
         $devCounter = [];
-        $err        = 0;
+        $errorCount = 0;
+
         foreach (self::SERVICETYPES as $type) {
             $devCounter[$type] = 0;
-            $this->processHmDevicesByType($type, $parentId, $parentConfig, $hmDevList, $devCounter, $err);
+
+            $response = $this->SendRequestMessage(
+                'listDevices',
+                [],
+                $this->getBidCosServiceAddress($ccuHost, $parentConfig, $type),
+                $parentConfig['UseSSL'],
+                $parentConfig['Password'],
+                $parentConfig['Username']
+            );
+
+            if ($response->errno !== 0) {
+                $this->SendDebug('Error', sprintf(self::ERROR_MSG, $type), 0);
+                $errorCount++;
+                continue;
+            }
+
+            $devices = (new Encoder())->decode($response->value());
+            foreach ($devices as $device) {
+                if (($device['PARENT'] === '') && ($device['ADDRESS'] !== 'BidCoS-Wir')) {
+                    $devCounter[$type]++;
+                }
+            }
+            $devLists[] = $devices;
         }
-        return [$hmDevList, $devCounter, $err];
+
+        return [array_merge(...$devLists), $devCounter, $errorCount];
     }
 
-    private function getBidCosServiceAddress(string $IP_adr_Homematic, array $ParentConfig, string $type): string
+    private function getBidCosServiceAddress(string $ccuHost, array $parentConfig, string $type): string
     {
-        $useSSL = $ParentConfig['UseSSL'] ? 'https://%s:%s' : 'http://%s:%s';
-        $port   = $ParentConfig[$type . 'SSLPort'];
-        if (!$ParentConfig['UseSSL']) {
-            $port = $ParentConfig[$type . 'Port'];
+        if ($parentConfig['UseSSL']) {
+            return sprintf('https://%s:%s', $ccuHost, $parentConfig[$type . 'SSLPort']);
         }
-        return sprintf($useSSL, $IP_adr_Homematic, $port);
+        return sprintf('http://%s:%s', $ccuHost, $parentConfig[$type . 'Port']);
     }
 
-    private function progressBarInit(): void
-    {
-        $this->UpdateFormField('ProgressBar', 'maximum', 9);
-        $this->UpdateFormField('ProgressBar', 'visible', true);
-    }
+    //
+    // Registrierung, Status, Fortschrittsanzeige
+    //
 
     private function RegisterProperties(): void
     {
@@ -1063,7 +1085,12 @@ HEREDOC;
     private function RegisterVariables(): void
     {
         if ($this->ReadPropertyBoolean(self::PROP_SAVEDEVICELISTINVARIABLE)) {
-            $this->RegisterVariableString('DeviceList', 'Device Liste', '', 1);
+            $this->RegisterVariableString(
+                self::VAR_IDENT_DEVICELIST,
+                $this->Translate('Device List'),
+                ['PRESENTATION' => VARIABLE_PRESENTATION_VALUE_PRESENTATION],
+                1
+            );
         }
     }
 
@@ -1076,51 +1103,206 @@ HEREDOC;
         }
     }
 
+    private function progressBarInit(): void
+    {
+        $this->progressBarStep = 0;
+        $this->UpdateFormField('ProgressBar', 'maximum', self::PROGRESS_BAR_MAX);
+        $this->UpdateFormField('ProgressBar', 'visible', true);
+    }
+
+    private function advanceProgressBar(): void
+    {
+        $this->UpdateFormField('ProgressBar', 'current', $this->progressBarStep++);
+    }
+
+    //
+    // Transport (XML-RPC und HM-Script)
+    //
+
+    /**
+     * @throws \JsonException
+     */
     private function SendRequestMessage(
         string $methodName,
         array $params,
-        string $BidCos_Service_adr,
-        $UseSSL,
-        string $Password,
-        string $Username
-    ): PhpXmlRpc\Response {
-        $xml_BidCos_client = new xmlrpc_client($BidCos_Service_adr);
-        if ($UseSSL) {
-            $xml_BidCos_client->setSSLVerifyHost(0);
-            $xml_BidCos_client->setSSLVerifyPeer(false);
+        string $serviceAddress,
+        bool $useSSL,
+        string $password,
+        string $username
+    ): Response {
+        $client = new Client($serviceAddress);
+        if ($useSSL) {
+            // Die CCU verwendet ein selbstsigniertes Zertifikat
+            $client->setOption(Client::OPT_VERIFY_HOST, 0);
+            $client->setOption(Client::OPT_VERIFY_PEER, false);
         }
-        if ($Password !== '') {
-            $xml_BidCos_client->setCredentials($Username, $Password);
+        if ($password !== '') {
+            $client->setCredentials($username, $password);
         }
-
-        $xml_reqmsg = new xmlrpcmsg($methodName, $params);
 
         $this->SendDebug(
             'send (xmlrpc)',
-            sprintf(
-                'send (xmlrpc):%s:%s, params: %s',
-                $BidCos_Service_adr,
-                $methodName,
-                json_encode($params, JSON_THROW_ON_ERROR)
-            ),
+            sprintf('send (xmlrpc):%s:%s, params: %s', $serviceAddress, $methodName, json_encode($params, JSON_THROW_ON_ERROR)),
             0
         );
-        return $xml_BidCos_client->send($xml_reqmsg);
+
+        return $client->send(new Request($methodName, $params));
+    }
+
+    private function getHMChannelName(string $ccuHost, string $deviceAddress): string
+    {
+        $hmScript = 'Name = (xmlrpc.GetObjectByHSSAddress(interfaces.GetAt(0), "' . $deviceAddress . '")).Name();' . PHP_EOL;
+
+        $scriptReturn = $this->SendScript($ccuHost, $hmScript);
+        if ($scriptReturn === false) {
+            return '';
+        }
+
+        $channelName = json_decode($scriptReturn, true, 512, JSON_THROW_ON_ERROR)['Name'] ?? '';
+        if (!is_string($channelName)) { //Wenn der ChannelName auf HM Seite leer ist, kommt ein leeres Array zurück
+            $channelName = '';
+        }
+
+        $this->SendDebug(__FUNCTION__, sprintf('HMAddress: %s, HMDeviceAddress: %s -> %s', $ccuHost, $deviceAddress, $channelName), 0);
+        return $channelName;
+    }
+
+    private function SendScript(string $ccuHost, string $hmScript): false|string
+    {
+        try {
+            $hmScriptResult = $this->LoadHMScript($ccuHost, 'Script.exe', $hmScript);
+            $xml            = new SimpleXMLElement(
+                mb_convert_encoding($hmScriptResult, 'UTF-8', 'ISO-8859-1'),
+                LIBXML_NOBLANKS | LIBXML_NONET
+            );
+        } catch (Exception $exc) {
+            $this->LogMessage($exc->getMessage(), KL_ERROR);
+            return false;
+        }
+
+        unset($xml->exec, $xml->sessionId, $xml->httpUserAgent);
+        return json_encode($xml, JSON_THROW_ON_ERROR);
     }
 
     /**
-     * Sorts an array of HM addresses in ascending order.
+     * Loads an HM script from a given HM address using cURL.
      *
-     * The function compares the "HM_address" key of each array element using a case-insensitive comparison.
-     * If the "HM_address" is in the format "xxx:yyy" where xxx and yyy are numeric values, the function
-     * compares the numeric part of the address as well.
+     * @param string $ccuHost  The CCU address.
+     * @param string $url      The URL of the HM script to load.
+     * @param string $hmScript The HM script to load.
      *
-     * @param array $a The first array element to compare.
-     * @param array $b The second array element to compare.
-     *
-     * @return int Returns a negative value if $a is less than $b, 0 if they are equal, and a positive value if $a is greater than $b.
+     * @return string The result of the cURL execution.
+     * @throws \InvalidArgumentException
+     * @throws \JsonException
+     * @throws \RuntimeException If the request fails or the HTTP response code is >= 400.
      */
-    private static function usort_HM_address(array $a, array $b): int
+    private function LoadHMScript(string $ccuHost, string $url, string $hmScript): string
+    {
+        if ($ccuHost === '') {
+            throw new InvalidArgumentException('CCU Address not set.');
+        }
+
+        $ch       = $this->setupCurlHandler($ccuHost, $url, $hmScript);
+        $result   = curl_exec($ch);
+        $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+        if (($result === false) || ($httpCode >= 400)) {
+            throw new RuntimeException('CCU unreachable');
+        }
+
+        return $result;
+    }
+
+    /**
+     * Sets up a cURL handler for making requests to the specified HM address.
+     *
+     * @param string $ccuHost  The CCU address.
+     * @param string $url      The URL to send the request to.
+     * @param string $hmScript The payload to send with the request.
+     *
+     * @return \CurlHandle The cURL handler.
+     * @throws \JsonException
+     * @throws \RuntimeException
+     */
+    private function setupCurlHandler(string $ccuHost, string $url, string $hmScript): CurlHandle
+    {
+        $parentId     = $this->fetchParentId();
+        $parentConfig = json_decode(IPS_GetConfiguration($parentId), true, 512, JSON_THROW_ON_ERROR);
+        $scheme       = $parentConfig['UseSSL'] ? 'https' : 'http';
+        $port         = $parentConfig['UseSSL'] ? $parentConfig['HSSSLPort'] : $parentConfig['HSPort'];
+
+        $ch = curl_init(sprintf('%s://%s:%s/%s', $scheme, $ccuHost, $port, $url));
+        if ($ch === false) {
+            throw new RuntimeException('curl_init failed');
+        }
+
+        $header = [
+            'Accept: text/plain,text/xml,application/xml,application/xhtml+xml,text/html',
+            'Cache-Control: max-age=0',
+            'Connection: close',
+            'Accept-Charset: UTF-8',
+            'Content-type: text/plain;charset="UTF-8"',
+            'Expect:'
+        ];
+
+        if ($parentConfig['UseSSL']) {
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        }
+
+        curl_setopt($ch, CURLOPT_HEADER, false);
+        curl_setopt($ch, CURLOPT_FAILONERROR, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $hmScript);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $header);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT_MS, 1000);
+        curl_setopt($ch, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+        curl_setopt($ch, CURLOPT_TIMEOUT_MS, 5000);
+
+        if ($parentConfig['Password'] !== '') {
+            curl_setopt($ch, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
+            curl_setopt($ch, CURLOPT_USERPWD, $parentConfig['Username'] . ':' . $parentConfig['Password']);
+        }
+
+        return $ch;
+    }
+
+    //
+    // Sortierung
+    //
+
+    private function sortDeviceRecords(array &$records): void
+    {
+        $sortField = match ($this->ReadPropertyInteger(self::PROP_SORTORDER)) {
+            1       => 'HM_devtype',
+            2       => 'HM_device',
+            3       => 'IPS_name',
+            4       => 'HM_devname',
+            default => null // HM address
+        };
+
+        if ($sortField === null) {
+            usort($records, self::compareByAddress(...));
+        } else {
+            usort($records, static fn(array $a, array $b): int => self::compareByField($a, $b, $sortField));
+        }
+    }
+
+    private static function compareByField(array $a, array $b, string $field): int
+    {
+        $result = strcasecmp((string)$a[$field], (string)$b[$field]);
+        if ($result === 0) {
+            $result = self::compareByAddress($a, $b);
+        }
+        return $result;
+    }
+
+    /**
+     * Vergleicht zwei Geräteeinträge anhand der HM-Adresse (Groß-/Kleinschreibung wird ignoriert).
+     * Bei Adressen der Form "xxx:yyy" mit gleichem Geräteteil wird die Kanalnummer verglichen.
+     */
+    private static function compareByAddress(array $a, array $b): int
     {
         $result = strcasecmp($a['HM_address'], $b['HM_address']);
 
@@ -1131,164 +1313,5 @@ HEREDOC;
         }
 
         return $result;
-    }
-
-    private static function usort_IPS_dev_name(array $a, array $b): int
-    {
-        if (($result = strcasecmp($a['IPS_name'], $b['IPS_name'])) === 0) {
-            $result = self::usort_HM_address($a, $b);
-        }
-
-        return $result;
-    }
-
-    private static function usort_HM_device_adr(array $a, array $b): int
-    {
-        if (($result = strcasecmp($a['HM_device'], $b['HM_device'])) === 0) {
-            $result = self::usort_HM_address($a, $b);
-        }
-
-        return $result;
-    }
-
-    private static function usort_HM_devtype(array $a, array $b): int
-    {
-        if (($result = strcasecmp($a['HM_devtype'], $b['HM_devtype'])) === 0) {
-            $result = self::usort_HM_address($a, $b);
-        }
-
-        return $result;
-    }
-
-    private static function usort_HM_devname(array $a, array $b): int
-    {
-        if (($result = strcasecmp($a['HM_devname'], $b['HM_devname'])) === 0) {
-            $result = self::usort_HM_address($a, $b);
-        }
-
-        return $result;
-    }
-
-    private function getHMChannelName($HMAddress, $HMDeviceAddress): string
-    {
-        $HMScript = 'Name = (xmlrpc.GetObjectByHSSAddress(interfaces.GetAt(0), "' . $HMDeviceAddress . '")).Name();' . PHP_EOL;
-
-        $ScriptReturn  = $this->SendScript($HMAddress, $HMScript);
-        $HMChannelName = json_decode($ScriptReturn, true, 512, JSON_THROW_ON_ERROR)['Name'];
-
-        if (!is_string($HMChannelName)) { //Wenn der ChannelName auf HM Seite leer ist, kommt ein leeres Array zurück
-            $HMChannelName = '';
-        }
-
-        $this->SendDebug(__FUNCTION__, sprintf('HMAddress: %s, HMDeviceAddress: %s -> %s', $HMAddress, $HMDeviceAddress, $HMChannelName), 0);
-        return $HMChannelName;
-    }
-
-    private function SendScript($HMAddress, $Script): false|string
-    {
-        $url = 'Script.exe';
-
-        try {
-            $HMScriptResult = $this->LoadHMScript($HMAddress, $url, $Script);
-            $xml            = @new SimpleXMLElement(mb_convert_encoding($HMScriptResult, 'UTF-8', 'ISO-8859-1'), LIBXML_NOBLANKS + LIBXML_NONET);
-        } catch (Exception $exc) {
-            trigger_error($exc->getMessage());
-        }
-        if (isset($xml)) {
-            unset($xml->exec, $xml->sessionId, $xml->httpUserAgent);
-            return json_encode($xml, JSON_THROW_ON_ERROR);
-        }
-
-        return false;
-    }
-
-
-    /**
-     * Sets up a cURL handler for making requests to the specified HM address.
-     *
-     * @param string $HMAddress The CCU address.
-     * @param string $url       The URL to send the request to.
-     * @param string $HMScript  The payload to send with the request.
-     *
-     * @return resource|false The cURL handler, or false if the CCU address is not set.
-     * @throws \JsonException
-     */
-    private function setupCurlHandler(string $HMAddress, string $url, string $HMScript): CurlHandle|false
-    {
-        $ParentId     = @IPS_GetInstance($this->InstanceID)['ConnectionID'];
-        $ParentConfig = json_decode(IPS_GetConfiguration($ParentId), true, 512, JSON_THROW_ON_ERROR);
-        $scheme       = $ParentConfig['UseSSL'] ? 'https' : 'http';
-        $port         = $ParentConfig['UseSSL'] ? $ParentConfig['HSSSLPort'] : $ParentConfig['HSPort'];
-
-        $ch = curl_init(sprintf('%s://%s:%s/%s', $scheme, $HMAddress, $port, $url));
-
-        $header[] = 'Accept: text/plain,text/xml,application/xml,application/xhtml+xml,text/html';
-        $header[] = 'Cache-Control: max-age=0';
-        $header[] = 'Connection: close';
-        $header[] = 'Accept-Charset: UTF-8';
-        $header[] = 'Content-type: text/plain;charset="UTF-8"';
-        $header[] = 'Expect:';
-
-        if ($ParentConfig['UseSSL']) {
-            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-        }
-
-        curl_setopt($ch, CURLOPT_HEADER, false);
-        curl_setopt($ch, CURLOPT_FAILONERROR, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $HMScript);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $header);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT_MS, 1000);
-        curl_setopt($ch, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
-        curl_setopt($ch, CURLOPT_TIMEOUT_MS, 5000);
-
-        if ($ParentConfig['Password'] !== '') {
-            curl_setopt($ch, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
-            curl_setopt($ch, CURLOPT_USERPWD, $ParentConfig['Username'] . ':' . $ParentConfig['Password']);
-        }
-
-        return $ch;
-    }
-
-    /**
-     * Loads an HM script from a given HM address using cURL.
-     *
-     * @param string $HMAddress The CCU address.
-     * @param string $url       The URL of the HM script to load.
-     * @param string $HMScript  The HM script to load.
-     *
-     * @return bool|string The result of the cURL execution, or false if the CCU address is not set.
-     * @throws \InvalidArgumentException
-     * @throws \JsonException
-     * @throws \RuntimeException
-     */
-    private function LoadHMScript(string $HMAddress, string $url, string $HMScript): bool|string
-    {
-        if ($HMAddress === '') {
-            throw new InvalidArgumentException('CCU Address not set.');
-        }
-        $ch     = $this->setupCurlHandler($HMAddress, $url, $HMScript);
-        $result = curl_exec($ch);
-        $this->handleCurlError($ch, $result);
-        return $result;
-    }
-
-    /**
-     * Handles CURL errors and throws a RuntimeException if the request fails or if the HTTP response code is greater than or equal to 400.
-     *
-     * @param \CurlHandle $ch     The CURL handle.
-     * @param mixed       $result The result of the CURL request.
-     *
-     * @return void
-     * @throws \RuntimeException If the CURL request fails or if the HTTP response code is greater than or equal to 400.
-     */
-    private function handleCurlError(CurlHandle $ch, false|string $result): void
-    {
-        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        if (($result === false) || ($http_code >= 400)) {
-            throw new RuntimeException('CCU unreachable');
-        }
     }
 }
