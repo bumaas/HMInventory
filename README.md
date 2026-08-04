@@ -1,6 +1,8 @@
 # HMInventory
 
-Modul für Symcon ab Version 5.2.
+[![Checks](https://github.com/bumaas/HMInventory/actions/workflows/check.yml/badge.svg)](https://github.com/bumaas/HMInventory/actions/workflows/check.yml)
+
+Modul für Symcon ab Version 9.0.
 
 Erstellt einen Report mit allen Homematic Geräten.
 
@@ -37,7 +39,7 @@ Zusätzlich wird die Liste der Devices bei Bedarf noch json-encoded in eine Stri
 
 ## 2. Voraussetzungen
 
- - Symcon 5.2
+ - Symcon ab Version 9.0
 
 ## 3. Installation
 
@@ -57,7 +59,17 @@ In Symcon an beliebiger Stelle `Instanz hinzufügen` auswählen und `HM Inventor
 ```php
 HMI_CreateReport(int $InstanceID): bool
 ```
-Erstellt den Report mit allen Homeatic Devices entsprechend der in der Instanz eingestellten Eigenschaften. Returniert mit false, falls die Erstellung fehlschlägt, sonst mit true.
+Erstellt den Report mit allen Homematic Devices entsprechend der in der Instanz eingestellten Eigenschaften. Returniert mit false, falls die Erstellung fehlschlägt, sonst mit true.
+
+```php
+HMI_GetOutputFileAbsolutePath(int $InstanceID): string
+```
+Liefert den absoluten Pfad der Ausgabedatei (relative Angaben werden gegen das Symcon-Kernelverzeichnis aufgelöst).
+
+```php
+HMI_GetReportUrl(int $InstanceID): string
+```
+Liefert die URL, unter der der Report im Browser aufgerufen werden kann. Liefert einen Leerstring, falls die Ausgabedatei nicht unterhalb des user-Verzeichnisses liegt.
 
 
 ## 5. Konfiguration
@@ -66,12 +78,13 @@ Erstellt den Report mit allen Homeatic Devices entsprechend der in der Instanz e
 
 | Eigenschaft                   | Typ     | Standardwert                                     | Funktion                                                                                                                                                                                                                                                      |
 |:------------------------------| :-----: |:-------------------------------------------------|:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| active                        | boolean | true                                             | legt fest, ob die Instanz aktiv ist                                                                                                                                                                                                                           |
 | OutputFile                    | string  | \<IPS Kernel Verzeichnis>/user/HM_inventory.html | wenn ein Dateiname angegeben ist, wird die Ausgabe im HTML Format in diese Datei geschrieben. Wird die Datei im User Verzeichnis abgelegt, so kann sie über die Adresse "https://<ip des Symcon Servers>/user/HM_inventory.html" im Browser angezeigt werden. |
 | SortOrder   | integer | 0                                                | Sortierreihenfolge:<br>0 - HM address<br>1 - HM device type<br>2 - HM channel type<br>3 - IPS device name<br>4 - HM device name |
 | ShowLongIPSDeviceNames        | boolean | false                                            | legt fest, ob IPS Namen mit oder ohne vollständigem Pfad ausgegeben werden sollen                                                                                                                                                                             |
 | ShowVirtualKeyEntries         | boolean | false                                            | legt fest, ob die Virtuellen Kanäle der Homematic ausgegeben werden sollen                                                                                                                                                                                    |
 | ShowHMConfiguratorDeviceNames | boolean | true                                             | legt fest, ob die in der Homematic gewählten Bezeichnungen ausgegeben werden sollen                                                                                                                                                                           |
-| ShowMaintenanceChannel        | boolean | true                                             | legt fest, ob die MAINTENANCE (0) Kanäle ausgegeben werden sollen                                                                                                                                                                                             |
+| ShowMaintenanceEntries        | boolean | true                                             | legt fest, ob die MAINTENANCE (0) Kanäle ausgegeben werden sollen                                                                                                                                                                                             |
 | ShowNotUsedChannels           | boolean | true                                             | legt fest, ob auch die Kanäle ausgegeben werden sollen, die nicht in IP-Symcon genutzt werden                                                                                                                                                                 |
 | SaveDeviceListInVariable      | boolean | false                                            | legt fest, ob die Liste der gefundenen Devices json codiert in einer Stringvariablen gespeichert werden soll                                                                                                                                                  |
 | UpdateInterval                | integer | 0                                                | legt fest, in welchem regelmäßigen Abstand (in Minuten) der Report aufbereitet werden soll (0: deaktiviert)                                                                                                                                                   |
@@ -88,6 +101,10 @@ GUID: `{240F4263-D2CB-49BC-AC00-3A9DC2CF3C10}`
 #### HM Inventory Report Creator
 
 GUID: `{E3BEF9D8-23D4-47A8-B823-53BD7AF65CC3}` 
+
+### Verwendete Bibliotheken
+
+* [phpxmlrpc](https://github.com/gggeek/phpxmlrpc) 4.11.5 (nur `src/`, eingebunden über den mitgelieferten Autoloader)
 
 
 
