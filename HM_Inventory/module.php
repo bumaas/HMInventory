@@ -910,6 +910,13 @@ HEREDOC;
             background-color: #334455;
         }
 
+        .bgcolor-header-devices td {
+            position: sticky;
+            top: 0;
+            background-color: #334455;
+            z-index: 1;
+        }
+
         .bg_color_oddline {
             background-color: #181818;
             font-size: 0.8em;
