@@ -1,4 +1,6 @@
-<?php /** @noinspection CurlSslServerSpoofingInspection */
+<?php
+
+/** @noinspection CurlSslServerSpoofingInspection */
 
 declare(strict_types=1);
 
