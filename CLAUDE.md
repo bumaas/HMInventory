@@ -1,6 +1,6 @@
 # HMInventory — Projektwissen
 
-IP-Symcon-Modulbibliothek (`bumaas`) mit genau einem Modul: **HM Inventory Report Creator**
+Symcon-Modulbibliothek (`bumaas`) mit genau einem Modul: **HM Inventory Report Creator**
 (`HM_Inventory/`, Typ Device, Prefix `HMI`). Erstellt per XML-RPC einen HTML-Report aller
 HomeMatic-Geräte einer CCU (BidCos-RF, HmIP, BidCos-Wired) inkl. RSSI-Werten.
 
@@ -14,7 +14,9 @@ HomeMatic-Geräte einer CCU (BidCos-RF, HmIP, BidCos-Wired) inkl. RSSI-Werten.
   Modulbaum). Einbindung über `src/Autoloader.php`, genutzt werden `Client`, `Request`,
   `Response`, `Encoder`. `Client::setSSLVerify*` ist deprecated → `setOption(Client::OPT_VERIFY_*)`.
 - `tests/check_locale.php` — Übersetzungs-Vollständigkeitscheck (Muster aus BlindControl),
-  läuft in der CI (`.github/workflows/check.yml`: php -l, JSON-Validität, Locale-Check).
+  läuft in der CI (`.github/workflows/check.yml`, PHP 8.4: Code-Stil mit php-cs-fixer gegen
+  das Regelwerk im Submodul `.style` — `libs/phpxmlrpc` per `.style-exclude` ausgenommen —,
+  php -l inkl. `libs/`, JSON-Validität, Locale-Check).
 
 ## Besonderheiten / Stolpersteine
 
@@ -34,5 +36,4 @@ HomeMatic-Geräte einer CCU (BidCos-RF, HmIP, BidCos-Wired) inkl. RSSI-Werten.
 
 ## Versionspflege
 
-`library.json`: bei jeder inhaltlichen Änderung `build` +1 und `date` aktualisieren;
-Commit-Subject: `<version> build <NN>: <Beschreibung>`.
+Siehe globale `CLAUDE.md`, Abschnitt „Symcon: Build-/Versionspflege in Modul-Repos".
