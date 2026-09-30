@@ -88,16 +88,26 @@ function ipSymconOk(string $ziel): bool
     return $gefunden;
 }
 
-/** Entfernt den Abschnitt einer Funktion aus der Funktionsreferenz. */
-function ohneFunktion(string $funktion): callable
+/** Ersetzt genau einen Treffer - findet das Muster nichts, ist die Fixture veraltet (lauter Abbruch statt stillem Grün). */
+function einmal(string $muster, string $ersatz, string $t): string
 {
-    return static fn (string $t): string => preg_replace('/```php\R' . $funktion . '\(.*?```\R.*?\R/s', '', $t, 1);
+    $neu = preg_replace($muster, $ersatz, $t, 1, $anzahl);
+    if ($anzahl !== 1) {
+        throw new RuntimeException("Fixture: Muster $muster nicht im README gefunden");
+    }
+    return $neu;
 }
 
-/** Entfernt die Tabellenzeile einer Eigenschaft. */
+/** Entfernt den Abschnitt einer Funktion aus der Funktionsreferenz und jede weitere Erwähnung (Beispiele). */
+function ohneFunktion(string $funktion): callable
+{
+    return static fn (string $t): string => str_replace($funktion . '(', 'Beispiel(', einmal('/```php\R' . $funktion . '\(.*?```\R.*?\R/s', '', $t));
+}
+
+/** Entfernt die Tabellenzeile einer Eigenschaft (erste Spalte „`Name` (Beschriftung)“). */
 function ohneZeile(string $feld): callable
 {
-    return static fn (string $t): string => preg_replace('/^\|\s*' . $feld . '\s*\|.*\R/m', '', $t, 1);
+    return static fn (string $t): string => einmal('/^\|\s*`?' . $feld . '`?[^|]*\|.*\R/m', '', $t);
 }
 
 echo 'Selbsttest check-readme.php (' . basename(dirname($pruefer)) . '/' . basename($pruefer) . ")\n";
@@ -117,17 +127,21 @@ $l = luecken(fixture(ohneZeile('OutputFile')));
 pruefe(in_array("feld:$modul:OutputFile", $l, true), 'Zeile OutputFile entfernt: als Lücke gemeldet');
 
 // 5. „active“ zählt nicht als Teil eines anderen Wortes.
-$l = luecken(fixture(static fn (string $t): string => str_replace('## 2. Voraussetzungen', "Die Ausgabe ist interactive.\n\n## 2. Voraussetzungen", ohneZeile('active')($t))));
+$l = luecken(fixture(static fn (string $t): string => einmal(
+    '/^## 2\. /m',
+    "Die Ausgabe ist interactive.\n\n$0",
+    // übrige Nennungen entschärfen: `active` im Fließtext, „aktiv“ in den Meldungstabellen
+    str_replace(['`active`', '| aktiv |', 'nicht aktiv!'], ['die Instanz', '| in Betrieb |', 'nicht bereit!'], ohneZeile('active')($t))
+)));
 pruefe(in_array("feld:$modul:active", $l, true), 'Zeile active entfernt, „interactive“ im Text: als Lücke gemeldet');
 
 // 6. Ein einzelnes „<“ verschluckt keinen Text bis zum nächsten „>“.
-$lt = static fn (string $t): string => preg_replace(
-    '/^### HM Inventory Report Creator\R/m',
+// Anker vor der Feldtabelle; dahinter steht in der Zeile OutputFile ein „>“ (`<Symcon-Verzeichnis>`).
+$lt = static fn (string $t): string => einmal(
+    '/^\*\*In Symcon\*\*\R/m',
     "$0\nSchwacher Empfang: RSSI < -90 dBm. Gilt auch unter IP-Symcon.\n",
-    $t,
-    1,
-    $anzahl
-) . ($anzahl === 1 ? '' : throw new RuntimeException('Fixture: Überschrift nicht gefunden'));
+    $t
+);
 $z = fixture($lt);
 $l = luecken($z);
 pruefe($l === [], '„RSSI < -90“ vor der Tabelle: Tabelle weiter gelesen' . ($l ? ' - gemeldet: ' . implode(', ', $l) : ''));
