@@ -1,13 +1,4 @@
 {
     "hinweis": "Doku-Lücken bei Einführung von tests/check-readme.php. Nur streichen, nie ergänzen - neue Felder und Funktionen gehören in die Doku.",
-    "offen": [
-        "feld:HM Inventory Report Creator:SaveDeviceListInVariable",
-        "feld:HM Inventory Report Creator:ShowHMConfiguratorDeviceNames",
-        "feld:HM Inventory Report Creator:ShowLongIPSDeviceNames",
-        "feld:HM Inventory Report Creator:ShowMaintenanceEntries",
-        "feld:HM Inventory Report Creator:ShowNotUsedChannels",
-        "feld:HM Inventory Report Creator:ShowVirtualKeyEntries",
-        "feld:HM Inventory Report Creator:SortOrder",
-        "feld:HM Inventory Report Creator:UpdateInterval"
-    ]
+    "offen": []
 }

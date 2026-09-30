@@ -16,7 +16,15 @@ HomeMatic-Geräte einer CCU (BidCos-RF, HmIP, BidCos-Wired) inkl. RSSI-Werten.
 - `tests/check_locale.php` — Übersetzungs-Vollständigkeitscheck (Muster aus BlindControl),
   läuft in der CI (`.github/workflows/check.yml`, PHP 8.4: Code-Stil mit php-cs-fixer gegen
   das Regelwerk im Submodul `.style` — `libs/phpxmlrpc` per `.style-exclude` ausgenommen —,
-  php -l inkl. `libs/`, JSON-Validität, Locale-Check).
+  php -l über `HM_Inventory/`, `tests/` und `libs/`, JSON-Validität, Locale-Check, danach
+  per Glob jede `tests/check-*.php`).
+- `tests/check-readme.php` — Doku-Sperrklinke: Module, Formularfelder (Name/Beschriftung als
+  Stichwort, also erste Tabellenspalte, Überschrift, Listenpunkt oder Fettdruck) und jede
+  öffentliche `HMI_*`-Funktion müssen im README stehen; kein „IP-Symcon“ in Doku, `form.json`,
+  `locale.json`, `module.php` (URLs ausgenommen). `tests/readme-bekannt.json` ist leer und
+  **bleibt leer**: Eine neue Lücke wird dokumentiert, nicht eingetragen (`--bekannt-schreiben`
+  streicht nur und bricht bei neuen Lücken mit Exit 1 ab). Die Prüfung selbst ist durch
+  `tests/check-readme-selbsttest.php` abgesichert (echtes README, gezielt verändert).
 
 ## Besonderheiten / Stolpersteine
 

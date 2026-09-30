@@ -390,11 +390,11 @@ class HMInventoryReportCreator extends IPSModuleStrict
             }
         }
 
-        // 2. Geräte, die in IP-Symcon angelegt sind
+        // 2. Geräte, die in Symcon angelegt sind
         $this->advanceProgressBar(); // Schritt 3
         [$deviceRecords, $ipsDeviceNum, $ipsChannelNum, $moduleNum] = $this->collectIpsDevices($parentId, $ccuHost, $devList);
 
-        // 3. Kanäle, die nicht in IP-Symcon genutzt werden (optional)
+        // 3. Kanäle, die nicht in Symcon genutzt werden (optional)
         $this->advanceProgressBar(); // Schritt 4
         if ($this->ReadPropertyBoolean(self::PROP_SHOWNOTUSEDCHANNELS)) {
             $moduleNum = $this->appendUnusedChannels($deviceRecords, $ccuHost, $devList, $moduleNum);
@@ -420,7 +420,7 @@ class HMInventoryReportCreator extends IPSModuleStrict
     }
 
     /**
-     * Sammelt alle HomeMatic-Geräteinstanzen, die in IP-Symcon angelegt sind.
+     * Sammelt alle HomeMatic-Geräteinstanzen, die in Symcon angelegt sind.
      *
      * @return array{0: array, 1: int, 2: int, 3: int} [Geräteliste, Anzahl IPS-Instanzen, Anzahl belegter HM-Kanäle, Anzahl Einträge]
      */
@@ -474,7 +474,7 @@ class HMInventoryReportCreator extends IPSModuleStrict
     }
 
     /**
-     * Ergänzt die Geräteliste um Kanäle, die nicht in IP-Symcon angelegt sind.
+     * Ergänzt die Geräteliste um Kanäle, die nicht in Symcon angelegt sind.
      *
      * @return int Fortgeschriebene Anzahl der Einträge
      */
