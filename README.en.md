@@ -89,7 +89,7 @@ Below follows one row per channel:
 | Dir. | `TX` = channel sends (sensor, button), `RX` = channel receives (actuator) |
 | AES | encryption on (+) or off (-) |
 | Roaming | roaming on (+) or off (-) |
-| one per interface | level pair in dBm |
+| `<serial number> (dBm)` | one level pair per connected interface |
 
 Device type, firmware, roaming and levels appear only in the first row of a device; further channels of the same device leave these columns empty.
 
@@ -97,7 +97,7 @@ Device type, firmware, roaming and levels appear only in the first row of a devi
 
 - The left value is the level at which the device last received the interface, the right value the level at which the interface received the device. The closer to 0, the better. `--` means no value is known.
 - **Underlined:** the interface the device is assigned to; with roaming, all interfaces.
-- **Yellow:** the interface with the best left value. If no interface has a left value, the first interface gets the colour – it means nothing then.
+- **Yellow:** the interface that receives the device best (highest right value). Sensors, thermostats and valve drives in particular often do not report the left value, so it does not count. Switching actuators usually do – when checking an actuator, look at the left number next to it.
 - **Red text:** the channel is assigned to more than one Symcon instance.
 - Devices without levels have not sent or received anything since the CCU's radio service started – or they are HmIP or wired devices, see [Limitations](#7-limitations).
 

@@ -89,7 +89,7 @@ Darunter folgt je Kanal eine Zeile:
 | Dir. | `TX` = Kanal sendet (Sensor, Taster), `RX` = Kanal empfängt (Aktor) |
 | AES | Verschlüsselung an (+) oder aus (-) |
 | Roaming | Roaming an (+) oder aus (-) |
-| je Interface | Pegelpaar in dBm |
+| `<Seriennummer> (dBm)` | je verbundenem Interface ein Pegelpaar |
 
 Gerätetyp, Firmware, Roaming und Pegel stehen nur in der ersten Zeile eines Geräts; die weiteren Kanäle desselben Geräts lassen diese Spalten leer.
 
@@ -97,7 +97,7 @@ Gerätetyp, Firmware, Roaming und Pegel stehen nur in der ersten Zeile eines Ger
 
 - Links steht der Pegel, mit dem das Gerät das Interface zuletzt empfangen hat, rechts der Pegel, mit dem das Interface das Gerät empfangen hat. Je näher an 0, desto besser. `--` heißt: kein Wert bekannt.
 - **Unterstrichen:** das Interface, dem das Gerät zugeordnet ist; bei Roaming alle Interfaces.
-- **Gelb:** das Interface mit dem besten linken Wert. Ist links bei keinem Interface ein Wert bekannt, trägt das erste Interface die Farbe – dann sagt sie nichts aus.
+- **Gelb:** das Interface, das das Gerät am besten hört (höchster rechter Wert). Den linken Wert liefern vor allem Sensoren, Thermostate und Stellantriebe oft nicht; er zählt deshalb nicht mit. Schaltaktoren liefern ihn meist – wer einen Aktor prüft, sieht ihn in der Zahl daneben.
 - **Rote Schrift:** Der Kanal ist mehr als einer Symcon-Instanz zugeordnet.
 - Geräte ohne Pegel haben seit dem letzten Start des Funkdienstes der CCU nichts gesendet oder empfangen – oder sie gehören zu HmIP oder Wired, siehe [Grenzen](#7-grenzen).
 

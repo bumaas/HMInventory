@@ -25,6 +25,12 @@ HomeMatic-Geräte einer CCU (BidCos-RF, HmIP, BidCos-Wired) inkl. RSSI-Werten.
   **bleibt leer**: Eine neue Lücke wird dokumentiert, nicht eingetragen (`--bekannt-schreiben`
   streicht nur und bricht bei neuen Lücken mit Exit 1 ab). Die Prüfung selbst ist durch
   `tests/check-readme-selbsttest.php` abgesichert (echtes README, gezielt verändert).
+- `tests/check-report-logik.php` — Report-Logik gegen den Kernel-Stub (`tests/harness.php`,
+  Submodul `tests/stubs` = symcon/SymconStubs, gepinnt; in CI aus `php -l`, JSON-Prüfung und
+  php-cs-fixer ausgenommen): Sortierung, gelbe Markierung (`markBestInterface`), Beschriftung.
+  Fixture `tests/fixtures/devicelist_nuc_2026-09-30.json` ist die echte `DeviceList` der
+  nuc-Instanz #10064 (362 Einträge, Namen geleert). Private Methoden ruft der Harness per
+  Reflection (`rufe`, `rufeMitReferenz`).
 
 ## Besonderheiten / Stolpersteine
 

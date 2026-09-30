@@ -654,20 +654,32 @@ class HMInventoryReportCreator extends IPSModuleStrict
                 }
             }
 
-            // Bestes Interface markieren
-            if (count($record['HM_levels']) > 0) {
-                $bestIdx = 0;
-                $maxRssi = -255;
-                foreach ($record['HM_levels'] as $idx => $level) {
-                    if (($level[0] > $maxRssi) && ($level[0] !== self::INVALID_LEVEL)) {
-                        $maxRssi = $level[0];
-                        $bestIdx = $idx;
-                    }
-                }
-                $record['HM_levels'][$bestIdx][3] = true;
-            }
+            $record['HM_levels'] = self::markBestInterface($record['HM_levels']);
         }
         unset($record);
+    }
+
+    /**
+     * Markiert das Interface, das das Gerät am besten hört (Feld 3): höchster rechter Wert.
+     * Der linke Wert (Empfang am Gerät) fehlt bei vielen Geräten und zählt daher nicht - so gilt
+     * ein Maßstab für alle. Ohne rechten Wert bleibt alles unmarkiert; bei Gleichstand gewinnt das
+     * erste Interface.
+     *
+     * @param list<array{0: int, 1: int, 2: bool, 3: bool}> $levels
+     * @return list<array{0: int, 1: int, 2: bool, 3: bool}>
+     */
+    private static function markBestInterface(array $levels): array
+    {
+        $bestIdx = null;
+        foreach ($levels as $idx => $level) {
+            if (($level[1] !== self::INVALID_LEVEL) && (($bestIdx === null) || ($level[1] > $levels[$bestIdx][1]))) {
+                $bestIdx = $idx;
+            }
+        }
+        if ($bestIdx !== null) {
+            $levels[$bestIdx][3] = true;
+        }
+        return $levels;
     }
 
     //
@@ -734,7 +746,7 @@ class HMInventoryReportCreator extends IPSModuleStrict
         foreach ($data['hm_BidCos_Ifc_list'] as $hm_ifce) {
             if ($hm_ifce['CONNECTED']) {
                 $html .= '<td style="width: 6%; text-align: center; color: #EEEEEE; font-size: small">' . $hm_ifce['ADDRESS']
-                         . ' tx/rx&nbsp;(db&micro;V)</td>';
+                         . '&nbsp;(dBm)</td>';
             }
         }
         $html .= '</tr>' . PHP_EOL;
@@ -809,14 +821,16 @@ class HMInventoryReportCreator extends IPSModuleStrict
                     <tr>
                         <td style="font-size: smaller; color: #DDDDDD">
                             <ol>
-                                <li>Interfaces: bold letters indicate the default BidCos-Interface.</li>
+                                <li>Interfaces: italic letters indicate the default BidCos-Interface.</li>
                                 <li>Level-pairs: the left value is showing the last signal level received by the device from the interface, while the
                                     right value is showing the last signal level received by the interface from the device.
                                 </li>
                                 <li>Level-pairs: underlined letters of the level-pair indicate the BidCos-Interface associated with the device (or all
                                     interfaces when Roaming is enabled for the device).
                                 </li>
-                                <li>Level-pairs: the yellow level-pair indicates the BidCos-Interface with best signal quality.</li>
+                                <li>Level-pairs: the yellow level-pair indicates the BidCos-Interface that receives the device best (right value).
+                                    All levels in dBm.
+                                </li>
                                 <li>Devices without level-pairs haven't sent/received anything since last start of the BidCos-service or are wired.</li>
                                 <li>BidCos channels assigned to more than one IPS-device are shown in red.</li>
                             </ol>
@@ -1305,8 +1319,8 @@ HEREDOC;
     private function sortDeviceRecords(array &$records): void
     {
         $sortField = match ($this->ReadPropertyInteger(self::PROP_SORTORDER)) {
-            1       => 'HM_devtype',
-            2       => 'HM_device',
+            1       => 'HM_device',   // HM device type (Spalte zeigt HM_device)
+            2       => 'HM_devtype',  // HM channel type (Spalte zeigt HM_devtype)
             3       => 'IPS_name',
             4       => 'HM_devname',
             default => null // HM address

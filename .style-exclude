@@ -1,2 +1,4 @@
 # Fremdbibliotheken — nicht von uns formatiert
 libs/phpxmlrpc
+# Kernel-Stub (Submodul symcon/SymconStubs)
+tests/stubs
