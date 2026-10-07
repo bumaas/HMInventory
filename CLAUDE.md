@@ -43,6 +43,14 @@ HomeMatic-Geräte einer CCU (BidCos-RF, HmIP, BidCos-Wired) inkl. RSSI-Werten.
   `<kernel>/user/`; Schema/Port kommen aus der ersten aktiven WebServer-Instanz
   (GUID `{D83E9CCF-9869-420F-8306-2B043E9BA180}`), Fallback ist die fest eingebaute
   Weboberfläche auf Port `3777`.
+- Der Report ist über `Translate()` beschriftet; die `locale.json` trägt zwei Schlüssel, die
+  keine Texte sind: `"en": "de"` liefert das `lang`-Attribut des Reports (Sprachcode aus der
+  Übersetzung, nicht aus `IPS_GetSystemLanguage()`), `"Y-m-d H:i:s": "d.m.Y H:i:s"` das
+  Datumsformat der Kopfzeile. Eine neue Sprache braucht beide. Die Roaming-Kopfzelle heißt
+  `Roa&shy;ming` (weicher Trennstrich, 2%-Spalte), kein `overflow-wrap`.
+  `tests/check-report-uebersetzung.php` prüft das mit umschaltbarer Harness-Sprache
+  (`HMInventoryHarness::$sprache`); Interfaces aus der Fixture liefert `fixtureInterfaces()`
+  (filtert die leeren `HM_Interface`-Werte der HmIP-Einträge).
 - `compareByAddress` gibt bei gleichem Geräteteil `0/1` (nie `-1`) zurück — historisches
   Verhalten, bei Refactorings beibehalten (Sortierstabilität des Reports).
 - Timer `Update` ruft `IPS_RequestAction(…, 'CreateReport', true)`; die öffentliche API

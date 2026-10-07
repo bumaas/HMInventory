@@ -38,9 +38,11 @@
       "Instance is not active!": "Die Instanz ist nicht aktiv!",
       "File \"%s\" not writable!": "Die Datei \"%s\" ist nicht schreibbar!",
       "HM Inventory (%s)": "HM Inventory (%s)",
-      "found at %s": "erstellt am %s",
+      "created at %s": "erstellt am %s",
+      "Y-m-d H:i:s": "d.m.Y H:i:s",
+      "en": "de",
       "%s HomeMatic interfaces (%s connected) with %s HM-RF devices, %s HM-wired devices and %s HmIP devices": "%s HomeMatic-Interfaces (%s verbunden) mit %s HM-RF-Geräten, %s HM-Wired-Geräten und %s HmIP-Geräten",
-      "%s IPS instances (connected to %s HM channels)": "%s IPS-Instanzen (verbunden mit %s HM-Kanälen)",
+      "%s IPS instances (connected to %s HM channels)": "%s Symcon-Instanzen (verbunden mit %s HM-Kanälen)",
       "Interface: %s (Fw: %s, DC: %s%%)": "Interface: %s (Fw: %s, DC: %s%%)",
       "connected": "verbunden",
       "not connected": "nicht verbunden",
@@ -48,7 +50,7 @@
       "Fw.": "Fw.",
       "Dir.": "Richtung",
       "AES": "AES",
-      "Roaming": "Roaming",
+      "Roa&shy;ming": "Roa&shy;ming",
       "No HomeMatic devices found!": "Keine HomeMatic-Geräte gefunden!",
       "Notes:": "Hinweise:",
       "Interfaces: italic letters indicate the default BidCos-Interface.": "Interfaces: kursive Schrift kennzeichnet das Standard-BidCos-Interface.",
@@ -56,7 +58,7 @@
       "Level-pairs: underlined letters of the level-pair indicate the BidCos-Interface associated with the device (or all interfaces when Roaming is enabled for the device).": "Pegelpaare: unterstrichen ist das Pegelpaar des BidCos-Interfaces, dem das Gerät zugeordnet ist (bei eingeschaltetem Roaming alle Interfaces).",
       "Level-pairs: the yellow level-pair indicates the BidCos-Interface that receives the device best (right value). All levels in dBm.": "Pegelpaare: gelb ist das Pegelpaar des BidCos-Interfaces, das das Gerät am besten empfängt (rechter Wert). Alle Pegel in dBm.",
       "Devices without level-pairs haven't sent/received anything since last start of the BidCos-service or are wired.": "Geräte ohne Pegelpaare haben seit dem letzten Start des BidCos-Dienstes nichts gesendet oder empfangen, oder sie sind verdrahtet.",
-      "BidCos channels assigned to more than one IPS-device are shown in red.": "BidCos-Kanäle, die mehr als einer IPS-Instanz zugeordnet sind, stehen in roter Schrift."
+      "BidCos channels assigned to more than one IPS-device are shown in red.": "BidCos-Kanäle, die mehr als einer Symcon-Instanz zugeordnet sind, stehen in roter Schrift."
    }
   }
 }

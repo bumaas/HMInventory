@@ -106,12 +106,9 @@ try {
 }
 
 echo "\nBeschriftung\n";
-$interfaces = [];
-foreach ($liste as $e) {
-    $interfaces[$e['HM_Interface']] = ['ADDRESS' => $e['HM_Interface'], 'CONNECTED' => true, 'DEFAULT' => false];
-}
+$interfaces = fixtureInterfaces($liste);
 $html = $m->rufe('renderDevicesSection', [
-    'hm_BidCos_Ifc_list'         => array_values($interfaces),
+    'hm_BidCos_Ifc_list'         => $interfaces,
     'HM_array'                   => [],
     'HM_interface_connected_num' => count($interfaces),
     'HM_module_num'              => 0,

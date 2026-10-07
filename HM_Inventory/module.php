@@ -692,7 +692,8 @@ class HMInventoryReportCreator extends IPSModuleStrict
         $inventoryStr  = sprintf(
             '<b>%s </b><b>&nbsp; %s</b>',
             sprintf($this->Translate('HM Inventory (%s)'), $moduleVersion),
-            sprintf($this->Translate('found at %s'), date('d.m.Y H:i:s'))
+            // Das Datumsformat ist übersetzbar: englisch ISO-ähnlich, deutsch Tag.Monat.Jahr (locale.json)
+            sprintf($this->Translate('created at %s'), date($this->Translate('Y-m-d H:i:s')))
         );
         $interfaceStr  = sprintf(
             $this->Translate('%s HomeMatic interfaces (%s connected) with %s HM-RF devices, %s HM-wired devices and %s HmIP devices'),
@@ -745,7 +746,8 @@ class HMInventoryReportCreator extends IPSModuleStrict
 
         $html .= $dthdr_td_b . $this->Translate('HM device type') . $dthdr_td_eb . $this->Translate('Fw.') . $dthdr_td_eb
                  . $this->Translate('HM channel type') . $dthdr_td_eb . $this->Translate('Dir.') . $dthdr_td_eb . $this->Translate('AES') . $dthdr_td_e;
-        $html .= '<td style="width: 2%; text-align: center; color: #EEEEEE; font-size: medium; overflow-wrap: anywhere">' . $this->Translate('Roaming') . '</td>';
+        // Weicher Trennstrich (&shy;): die schmale Spalte bricht nach „Roa-“ um, nicht nach jedem Buchstaben
+        $html .= '<td style="width: 2%; text-align: center; color: #EEEEEE; font-size: medium">' . $this->Translate('Roa&shy;ming') . '</td>';
 
         foreach ($data['hm_BidCos_Ifc_list'] as $hm_ifce) {
             if ($hm_ifce['CONNECTED']) {
@@ -939,11 +941,16 @@ HEREDOC;
         string $HTML_dvcs,
         string $HTML_notes
     ): string {
-        $lang = substr(IPS_GetSystemLanguage(), 0, 2); // z. B. "de_DE" -> "de"
+        // Sprachcode des Reports aus der Übersetzung, nicht aus der Systemsprache: die locale.json
+        // übersetzt den Schlüssel "en" in ihren eigenen Code ("de"). Ohne Übersetzung bleiben die
+        // Texte englisch, also auch das lang-Attribut.
+        $lang = $this->Translate('en');
 
         return <<<HEREDOC
+<!DOCTYPE html>
 <html lang="$lang">
 <head>
+    <meta charset="utf-8">
     <style>
         html, body {
             font-family: Arial, Helvetica, sans-serif;
