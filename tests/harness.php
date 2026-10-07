@@ -37,6 +37,21 @@ final class HMInventoryHarness extends HMInventoryReportCreator
         return 1790780000; // fest: 30.09.2026
     }
 
+    /**
+     * Übersetzt wie ein deutsches Symcon: Schlüssel aus HM_Inventory/locale.json (translations.de).
+     * Der Kernel-Stub gibt den Text sonst unverändert zurück, dann wäre im Test nicht zu sehen,
+     * ob ein Text überhaupt durch Translate() läuft.
+     */
+    public function Translate(string $Text): string
+    {
+        static $de = null;
+        if ($de === null) {
+            $locale = json_decode(file_get_contents(dirname(__DIR__) . '/HM_Inventory/locale.json'), true, 512, JSON_THROW_ON_ERROR);
+            $de     = $locale['translations']['de'];
+        }
+        return $de[$Text] ?? $Text;
+    }
+
     /** Eine Eigenschaft setzen und übernehmen, wie ein Speichern des Formulars. */
     public function einstellen(string $name, mixed $wert): void
     {

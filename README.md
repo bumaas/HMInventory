@@ -72,7 +72,7 @@ Erstellt eine Übersicht aller Homematic-Geräte einer CCU als HTML-Seite: jeder
 
 ## 3. Den Report lesen
 
-Der Report ist englisch beschriftet. Er beginnt mit einer **Zusammenfassung**: die Zahl der Funk-Interfaces (und wie viele davon verbunden sind), die Zahl der Geräte je Dienst (HM-RF, HM-Wired, HmIP) und die Zahl der Symcon-Instanzen, die an diesem HomeMatic Socket hängen. Rechts daneben stehen die **Funk-Interfaces** der CCU mit Seriennummer, Firmware, Duty Cycle und Verbindungsstatus; das Standard-Interface steht kursiv an erster Stelle.
+Der Report ist in der Systemsprache von Symcon beschriftet, deutsch oder englisch. Er beginnt mit einer **Zusammenfassung**: die Zahl der Funk-Interfaces (und wie viele davon verbunden sind), die Zahl der Geräte je Dienst (HM-RF, HM-Wired, HmIP) und die Zahl der Symcon-Instanzen, die an diesem HomeMatic Socket hängen. Rechts daneben stehen die **Funk-Interfaces** der CCU mit Seriennummer, Firmware, Duty Cycle und Verbindungsstatus; das Standard-Interface steht kursiv an erster Stelle.
 
 Darunter folgt je Kanal eine Zeile:
 
@@ -80,13 +80,13 @@ Darunter folgt je Kanal eine Zeile:
 | :----- | :----- |
 | ## | laufende Nummer |
 | IPS ID | Objekt-ID der Symcon-Instanz, „-“ bei Kanälen ohne Instanz |
-| IPS device name | Name der Symcon-Instanz (mit `ShowLongIPSDeviceNames` samt Pfad) |
-| HM address | Adresse des Kanals in der CCU. Ein vorangestelltes `*` kennzeichnet virtuelle Geräte der CCU, etwa Rauchmeldergruppen. |
-| HM device name | Name des Kanals in der CCU (nur mit `ShowHMConfiguratorDeviceNames`) |
-| HM device type | Gerätetyp, z. B. `HMIP-SWDO` |
+| IPS Gerätename | Name der Symcon-Instanz (mit `ShowLongIPSDeviceNames` samt Pfad) |
+| HM Adresse | Adresse des Kanals in der CCU. Ein vorangestelltes `*` kennzeichnet virtuelle Geräte der CCU, etwa Rauchmeldergruppen. |
+| HM Gerätename | Name des Kanals in der CCU (nur mit `ShowHMConfiguratorDeviceNames`) |
+| HM Gerätetyp | Gerätetyp, z. B. `HMIP-SWDO` |
 | Fw. | Firmware des Geräts |
-| HM channel type | Kanaltyp, z. B. `SHUTTER_CONTACT` |
-| Dir. | `TX` = Kanal sendet (Sensor, Taster), `RX` = Kanal empfängt (Aktor) |
+| HM Kanaltyp | Kanaltyp, z. B. `SHUTTER_CONTACT` |
+| Richtung | `TX` = Kanal sendet (Sensor, Taster), `RX` = Kanal empfängt (Aktor) |
 | AES | Verschlüsselung an (+) oder aus (-) |
 | Roaming | Roaming an (+) oder aus (-) |
 | `<Seriennummer> (dBm)` | je verbundenem Interface ein Pegelpaar |

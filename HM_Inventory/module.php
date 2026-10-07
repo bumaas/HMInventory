@@ -689,16 +689,20 @@ class HMInventoryReportCreator extends IPSModuleStrict
     private function renderHeaderSection(array $data): string
     {
         $moduleVersion = $this->getModuleVersion();
-        $inventoryStr  = sprintf('<b>HM Inventory (%s) </b><b>&nbsp; found at %s</b>', $moduleVersion, date('d.m.Y H:i:s'));
+        $inventoryStr  = sprintf(
+            '<b>%s </b><b>&nbsp; %s</b>',
+            sprintf($this->Translate('HM Inventory (%s)'), $moduleVersion),
+            sprintf($this->Translate('found at %s'), date('d.m.Y H:i:s'))
+        );
         $interfaceStr  = sprintf(
-            '%s HomeMatic interfaces (%s connected) with %s HM-RF devices, %s HM-wired devices and %s HmIP devices',
+            $this->Translate('%s HomeMatic interfaces (%s connected) with %s HM-RF devices, %s HM-wired devices and %s HmIP devices'),
             $data['HM_interface_num'],
             $data['HM_interface_connected_num'],
             $data['dev_counter']['RF'],
             $data['dev_counter']['WR'],
             $data['dev_counter']['IP']
         );
-        $instanceStr   = sprintf('%s IPS instances (connected to %s HM channels)', $data['IPS_device_num'], $data['IPS_HM_channel_num']);
+        $instanceStr   = sprintf($this->Translate('%s IPS instances (connected to %s HM channels)'), $data['IPS_device_num'], $data['IPS_HM_channel_num']);
 
         $html = "<table class='table-align-left Background-color'>";
         $html .= "<tr style='vertical-align: top'><td><table style='text-align: left; font-size: large; color: #99AABB'>";
@@ -732,16 +736,16 @@ class HMInventoryReportCreator extends IPSModuleStrict
         $dthdr_td_e   = '</b></td>';
         $dthdr_td_eb  = $dthdr_td_e . $dthdr_td_b;
 
-        $html .= $dthdr_td_b_r . '&nbsp;##&nbsp;' . $dthdr_td_eb . 'IPS ID' . $dthdr_td_eb
-                 . 'IPS device name&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;' . $dthdr_td_eb . 'HM address' . $dthdr_td_e;
+        $html .= $dthdr_td_b_r . '&nbsp;##&nbsp;' . $dthdr_td_eb . $this->Translate('IPS ID') . $dthdr_td_eb
+                 . $this->Translate('IPS device name') . '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;' . $dthdr_td_eb . $this->Translate('HM address') . $dthdr_td_e;
 
         if ($this->ReadPropertyBoolean(self::PROP_SHOWHMCONFIGURATORDEVICENAMES)) {
-            $html .= $dthdr_td_b . 'HM device name' . $dthdr_td_e;
+            $html .= $dthdr_td_b . $this->Translate('HM device name') . $dthdr_td_e;
         }
 
-        $html .= $dthdr_td_b . 'HM device type' . $dthdr_td_eb . 'Fw.' . $dthdr_td_eb . 'HM channel type' . $dthdr_td_eb . 'Dir.' . $dthdr_td_eb
-                 . 'AES' . $dthdr_td_e;
-        $html .= '<td style="width: 2%; text-align: center; color: #EEEEEE; font-size: medium">Roa- ming</td>';
+        $html .= $dthdr_td_b . $this->Translate('HM device type') . $dthdr_td_eb . $this->Translate('Fw.') . $dthdr_td_eb
+                 . $this->Translate('HM channel type') . $dthdr_td_eb . $this->Translate('Dir.') . $dthdr_td_eb . $this->Translate('AES') . $dthdr_td_e;
+        $html .= '<td style="width: 2%; text-align: center; color: #EEEEEE; font-size: medium; overflow-wrap: anywhere">' . $this->Translate('Roaming') . '</td>';
 
         foreach ($data['hm_BidCos_Ifc_list'] as $hm_ifce) {
             if ($hm_ifce['CONNECTED']) {
@@ -762,7 +766,7 @@ class HMInventoryReportCreator extends IPSModuleStrict
         }
 
         if ($data['HM_module_num'] === 0) {
-            $html .= '<tr><td colspan=20 style="text-align: center; color: #DDDDDD; font-size: large"><br/>No HomeMatic devices found!</td></tr>';
+            $html .= '<tr><td colspan=20 style="text-align: center; color: #DDDDDD; font-size: large"><br/>' . $this->Translate('No HomeMatic devices found!') . '</td></tr>';
         }
 
         $html .= '</table></td></tr>';
@@ -811,28 +815,35 @@ class HMInventoryReportCreator extends IPSModuleStrict
 
     private function renderNotesSection(): string
     {
+        $notes = [
+            $this->Translate('Interfaces: italic letters indicate the default BidCos-Interface.'),
+            $this->Translate(
+                'Level-pairs: the left value is showing the last signal level received by the device from the interface, while the right value is showing the last signal level received by the interface from the device.'
+            ),
+            $this->Translate(
+                'Level-pairs: underlined letters of the level-pair indicate the BidCos-Interface associated with the device (or all interfaces when Roaming is enabled for the device).'
+            ),
+            $this->Translate('Level-pairs: the yellow level-pair indicates the BidCos-Interface that receives the device best (right value). All levels in dBm.'),
+            $this->Translate("Devices without level-pairs haven't sent/received anything since last start of the BidCos-service or are wired."),
+            $this->Translate('BidCos channels assigned to more than one IPS-device are shown in red.'),
+        ];
+        $items = '';
+        foreach ($notes as $note) {
+            $items .= '<li>' . $note . '</li>' . PHP_EOL;
+        }
+        $title = $this->Translate('Notes:');
+
         return <<<HEREDOC
         <tr><!-- Notes Überschriftenzeile-->
             <td colspan="3">
                 <table style="width: 100%; text-align: left; font-size:medium; color: #DDDDDD">
                     <tr>
-                        <td>Notes:</td>
+                        <td>$title</td>
                     </tr>
                     <tr>
                         <td style="font-size: smaller; color: #DDDDDD">
                             <ol>
-                                <li>Interfaces: italic letters indicate the default BidCos-Interface.</li>
-                                <li>Level-pairs: the left value is showing the last signal level received by the device from the interface, while the
-                                    right value is showing the last signal level received by the interface from the device.
-                                </li>
-                                <li>Level-pairs: underlined letters of the level-pair indicate the BidCos-Interface associated with the device (or all
-                                    interfaces when Roaming is enabled for the device).
-                                </li>
-                                <li>Level-pairs: the yellow level-pair indicates the BidCos-Interface that receives the device best (right value).
-                                    All levels in dBm.
-                                </li>
-                                <li>Devices without level-pairs haven't sent/received anything since last start of the BidCos-service or are wired.</li>
-                                <li>BidCos channels assigned to more than one IPS-device are shown in red.</li>
+$items
                             </ol>
                         </td>
                     </tr>
@@ -887,11 +898,16 @@ HEREDOC;
         $italicStart = $hm_ifce['DEFAULT'] ? '<i>' : '';
         $italicEnd   = $hm_ifce['DEFAULT'] ? '</i>' : '';
 
-        $connectionStatus = $hm_ifce['CONNECTED'] ? 'connected' : 'Not connected';
-        $interfaceInfo    = sprintf('%s (Fw: %s, DC: %s%%)', $hm_ifce['ADDRESS'], $hm_ifce['FIRMWARE_VERSION'], $hm_ifce['DUTY_CYCLE']);
+        $connectionStatus = $hm_ifce['CONNECTED'] ? $this->Translate('connected') : $this->Translate('not connected');
+        $interfaceInfo    = sprintf(
+            $this->Translate('Interface: %s (Fw: %s, DC: %s%%)'),
+            $hm_ifce['ADDRESS'],
+            $hm_ifce['FIRMWARE_VERSION'],
+            $hm_ifce['DUTY_CYCLE']
+        );
 
         return "<tr>
-                <td style='font-size: small;color: #EEEEEE'>{$italicStart}Interface: $interfaceInfo&nbsp;{$italicEnd}</td>
+                <td style='font-size: small;color: #EEEEEE'>{$italicStart}$interfaceInfo&nbsp;{$italicEnd}</td>
                 <td style='font-size: small;color: #EEEEEE'>{$italicStart}{$hm_ifce['DESCRIPTION']}{$italicEnd}</td>
                 <td style='font-size: small;color: #EEEEEE'>{$italicStart}{$connectionStatus}{$italicEnd}</td>
             </tr>" . PHP_EOL;
@@ -923,8 +939,10 @@ HEREDOC;
         string $HTML_dvcs,
         string $HTML_notes
     ): string {
+        $lang = substr(IPS_GetSystemLanguage(), 0, 2); // z. B. "de_DE" -> "de"
+
         return <<<HEREDOC
-<html lang="">
+<html lang="$lang">
 <head>
     <style>
         html, body {
@@ -981,7 +999,7 @@ HEREDOC;
         }
 
     </style>
-    <title></title>
+    <title>HM Inventory</title>
 </head>
 
 <body>

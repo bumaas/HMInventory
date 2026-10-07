@@ -72,7 +72,7 @@ Creates an HTML overview of all Homematic devices of a CCU: every channel with a
 
 ## 3. Reading the report
 
-The report starts with a **summary**: the number of radio interfaces (and how many are connected), the number of devices per service (HM-RF, HM-Wired, HmIP) and the number of Symcon instances attached to this HomeMatic Socket. Next to it are the **radio interfaces** of the CCU with serial number, firmware, duty cycle and connection state; the default interface is listed first, in italics.
+The report is labelled in the system language of Symcon, German or English. It starts with a **summary**: the number of radio interfaces (and how many are connected), the number of devices per service (HM-RF, HM-Wired, HmIP) and the number of Symcon instances attached to this HomeMatic Socket. Next to it are the **radio interfaces** of the CCU with serial number, firmware, duty cycle and connection state; the default interface is listed first, in italics.
 
 Below follows one row per channel:
 

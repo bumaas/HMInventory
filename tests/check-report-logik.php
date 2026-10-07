@@ -119,7 +119,8 @@ $html = $m->rufe('renderDevicesSection', [
 pruefe(str_contains($html, 'dBm'), 'Pegelspalten in dBm beschriftet');
 pruefe(!str_contains($html, '&micro;V') && !str_contains($html, 'µV'), 'keine Angabe „dbµV“ mehr');
 $notes = $m->rufe('renderNotesSection');
-pruefe(str_contains($notes, 'italic') && !str_contains($notes, 'bold letters'), 'Legende: Standard-Interface kursiv, wie dargestellt');
+// Die Harness übersetzt wie ein deutsches Symcon, die Legende kommt deshalb deutsch zurück.
+pruefe(str_contains($notes, 'kursiv') && !str_contains($notes, 'fett'), 'Legende: Standard-Interface kursiv, wie dargestellt');
 pruefe(!str_contains($m->rufe('formatInterfaceRow', ['ADDRESS' => 'X', 'FIRMWARE_VERSION' => '1', 'DUTY_CYCLE' => 0, 'DESCRIPTION' => '', 'CONNECTED' => true, 'DEFAULT' => true]), '<b>'), 'Standard-Interface wird kursiv dargestellt (nicht fett)');
 
 ergebnis();
